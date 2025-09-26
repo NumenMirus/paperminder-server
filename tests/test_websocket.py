@@ -38,3 +38,29 @@ def test_sender_gets_status_when_recipient_missing() -> None:
         assert failure["kind"] == "status"
         assert failure["code"] == "recipient_not_connected"
         assert "ghost" in failure["detail"]
+
+
+def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
+    with client.websocket_connect("/ws/destiny") as destiny_ws:
+        assert destiny_ws.receive_json()["code"] == "info"
+
+        response = client.post(
+            "/test/messages",
+            json={"recipient_id": "destiny", "content": "http says hi", "sender_id": "system"},
+        )
+
+        assert response.status_code == 202
+        assert response.json() == {"status": "sent"}
+
+        delivery = destiny_ws.receive_json()
+        assert delivery["kind"] == "message"
+        assert delivery["sender_id"] == "system"
+        assert delivery["recipient_id"] == "destiny"
+        assert delivery["content"] == "http says hi"
+
+
+def test_http_test_endpoint_returns_not_found_when_user_absent() -> None:
+    response = client.post("/test/messages", json={"recipient_id": "phantom", "content": "boo"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"].startswith("Recipient 'phantom'")

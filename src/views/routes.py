@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.models.message import InboundMessage, StatusMessage
+from src.models.message import InboundMessage, StatusMessage, TestMessageRequest
 
 router = APIRouter()
 
@@ -18,6 +18,22 @@ async def health_check() -> dict[str, str]:
     """Simple health probe for monitoring."""
 
     return {"status": "ok"}
+
+
+@router.post("/test/messages", status_code=status.HTTP_202_ACCEPTED)
+async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
+    """HTTP endpoint to deliver a test message to a connected websocket client."""
+
+    inbound = InboundMessage(recipient_id=payload.recipient_id, content=payload.content)
+    try:
+        await _manager.send_personal_message(sender_id=payload.sender_id, message=inbound)
+    except RecipientNotConnectedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recipient '{payload.recipient_id}' is not connected.",
+        ) from exc
+
+    return {"status": "sent"}
 
 
 @router.websocket("/ws/{user_id}")

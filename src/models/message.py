@@ -30,3 +30,19 @@ class StatusMessage(BaseModel):
     detail: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     kind: Literal["status"] = "status"
+
+
+class TestMessageRequest(BaseModel):
+    """Request body for sending a test message to a connected websocket user via HTTP."""
+
+    recipient_id: str = Field(
+        ..., min_length=1, description="Identifier of the user who should receive the test message"
+    )
+    content: str = Field(
+        ..., min_length=1, max_length=2000, description="Body of the test message to deliver"
+    )
+    sender_id: str = Field(
+        default="test",
+        min_length=1,
+        description="Identifier to include as the sender in the delivered message",
+    )
