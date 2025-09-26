@@ -9,7 +9,9 @@ click==8.3.0
 fastapi==0.117.1
     # via paperminder-server (pyproject.toml)
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   uvicorn
+    #   wsproto
 idna==3.10
     # via anyio
 pydantic==2.11.9
@@ -33,4 +35,8 @@ typing-extensions==4.15.0
 typing-inspection==0.4.1
     # via pydantic
 uvicorn==0.37.0
+    # via paperminder-server (pyproject.toml)
+websockets==15.0.1
+    # via paperminder-server (pyproject.toml)
+wsproto==1.2.0
     # via paperminder-server (pyproject.toml)
