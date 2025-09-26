@@ -139,23 +139,21 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "pydantic" },
-    { name = "pytest" },
     { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.117.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.11.9" },
-    { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3" },
     { name = "uvicorn", specifier = ">=0.37.0" },
 ]
