@@ -27,9 +27,13 @@ async def health_check() -> dict[str, str]:
 async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
     """HTTP endpoint to deliver a test message to a connected websocket client."""
 
-    inbound = InboundMessage(recipient_id=payload.recipient_id, content=payload.content)
+    inbound = InboundMessage(
+        recipient_id=payload.recipient_id,
+        sender_name=payload.sender_name,
+        message=payload.message,
+    )
     try:
-        await _manager.send_personal_message(sender_id=payload.sender_id, message=inbound)
+        await _manager.send_personal_message(sender_id=payload.sender_name, message=inbound)
     except RecipientNotConnectedError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

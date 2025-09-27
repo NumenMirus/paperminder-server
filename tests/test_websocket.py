@@ -19,13 +19,12 @@ def test_personal_message_delivery_between_connected_users() -> None:
         assert alice_ws.receive_json()["code"] == "info"
         assert bob_ws.receive_json()["code"] == "info"
 
-        alice_ws.send_json({"recipient_id": "bob", "content": "hello"})
+        alice_ws.send_json({"recipient_id": "bob", "sender_name": "Alice", "message": "hello"})
         delivery = bob_ws.receive_json()
 
         assert delivery["kind"] == "message"
-        assert delivery["sender_id"] == "alice"
-        assert delivery["recipient_id"] == "bob"
-        assert delivery["content"] == "hello"
+        assert delivery["sender_name"] == "Alice"
+        assert delivery["message"] == "hello"
 
 
 def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None:
@@ -55,7 +54,7 @@ def test_sender_gets_status_when_recipient_missing() -> None:
     with client.websocket_connect("/ws/charlie") as charlie_ws:
         assert charlie_ws.receive_json()["code"] == "info"
 
-        charlie_ws.send_json({"recipient_id": "ghost", "content": "ping"})
+        charlie_ws.send_json({"recipient_id": "ghost", "sender_name": "Charlie", "message": "ping"})
         failure = charlie_ws.receive_json()
 
         assert failure["kind"] == "status"
@@ -69,7 +68,7 @@ def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
 
         response = client.post(
             "/test/messages",
-            json={"recipient_id": "destiny", "content": "http says hi", "sender_id": "system"},
+            json={"recipient_id": "destiny", "message": "http says hi", "sender_name": "System"},
         )
 
         assert response.status_code == 202
@@ -77,13 +76,14 @@ def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
 
         delivery = destiny_ws.receive_json()
         assert delivery["kind"] == "message"
-        assert delivery["sender_id"] == "system"
-        assert delivery["recipient_id"] == "destiny"
-        assert delivery["content"] == "http says hi"
+        assert delivery["sender_name"] == "System"
+        assert delivery["message"] == "http says hi"
 
 
 def test_http_test_endpoint_returns_not_found_when_user_absent() -> None:
-    response = client.post("/test/messages", json={"recipient_id": "phantom", "content": "boo"})
+    response = client.post(
+        "/test/messages", json={"recipient_id": "phantom", "message": "boo", "sender_name": "System"}
+    )
 
     assert response.status_code == 404
     assert response.json()["detail"].startswith("Recipient 'phantom'")

@@ -53,9 +53,8 @@ class ConnectionManager:
             raise RecipientNotConnectedError(message.recipient_id)
 
         outbound = OutboundMessage(
-            sender_id=sender_id,
-            recipient_id=message.recipient_id,
-            content=message.content,
+            sender_name=message.sender_name or sender_id,
+            message=message.message,
         )
         payload = outbound.model_dump_json()
         for websocket in recipients:

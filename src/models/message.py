@@ -10,15 +10,15 @@ class InboundMessage(BaseModel):
     """Message schema for data sent by a websocket client."""
 
     recipient_id: str = Field(..., min_length=1, description="Identifier of the intended recipient")
-    content: str = Field(..., min_length=1, max_length=2000, description="Body of the message")
+    sender_name: str = Field(..., min_length=1, description="Display name of the sender")
+    message: str = Field(..., min_length=1, max_length=500, description="Body of the message to deliver")
 
 
 class OutboundMessage(BaseModel):
     """Envelope for standard user-to-user messages delivered to websocket clients."""
 
-    sender_id: str
-    recipient_id: str
-    content: str
+    sender_name: str
+    message: str = Field(..., max_length=500)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     kind: Literal["message"] = "message"
 
@@ -38,13 +38,13 @@ class TestMessageRequest(BaseModel):
     recipient_id: str = Field(
         ..., min_length=1, description="Identifier of the user who should receive the test message"
     )
-    content: str = Field(
-        ..., min_length=1, max_length=2000, description="Body of the test message to deliver"
-    )
-    sender_id: str = Field(
-        default="test",
+    sender_name: str = Field(
+        default="system",
         min_length=1,
-        description="Identifier to include as the sender in the delivered message",
+        description="Display name to include as the sender in the delivered message",
+    )
+    message: str = Field(
+        ..., min_length=1, max_length=500, description="Body of the test message to deliver"
     )
 
 
