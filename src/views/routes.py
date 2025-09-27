@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from json import JSONDecodeError
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.models.message import InboundMessage, StatusMessage, TestMessageRequest
+from src.models.message import InboundMessage, StatusMessage, SubscriptionRequest, TestMessageRequest
 
 router = APIRouter()
 
@@ -48,7 +51,43 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: str) -> None:
         while True:
             raw_payload = await websocket.receive_text()
             try:
-                message = InboundMessage.model_validate_json(raw_payload)
+                payload = json.loads(raw_payload)
+            except JSONDecodeError as exc:
+                await _manager.notify(
+                    websocket,
+                    StatusMessage(code="validation_error", detail=f"Invalid JSON payload: {exc}"),
+                )
+                continue
+
+            if not isinstance(payload, dict):
+                await _manager.notify(
+                    websocket,
+                    StatusMessage(code="validation_error", detail="Payload must be a JSON object."),
+                )
+                continue
+
+            if {"printer_name", "api_key"}.issubset(payload):
+                try:
+                    subscription = SubscriptionRequest.model_validate(payload)
+                except ValidationError as exc:
+                    await _manager.notify(
+                        websocket,
+                        StatusMessage(code="validation_error", detail=str(exc)),
+                    )
+                    continue
+
+                await _manager.register_subscription(websocket, subscription)
+                await _manager.notify(
+                    websocket,
+                    StatusMessage(
+                        code="subscription_accepted",
+                        detail=f"Printer '{subscription.printer_name}' subscribed successfully.",
+                    ),
+                )
+                continue
+
+            try:
+                message = InboundMessage.model_validate(payload)
             except ValidationError as exc:
                 await _manager.notify(
                     websocket,

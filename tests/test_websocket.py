@@ -28,6 +28,29 @@ def test_personal_message_delivery_between_connected_users() -> None:
         assert delivery["content"] == "hello"
 
 
+def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None:
+    with client.websocket_connect("/ws/printer-client") as printer_ws:
+        assert printer_ws.receive_json()["code"] == "info"
+
+        printer_ws.send_json({"printer_name": "office-printer", "api_key": "abc123"})
+        acknowledgement = printer_ws.receive_json()
+
+        assert acknowledgement["kind"] == "status"
+        assert acknowledgement["code"] == "subscription_accepted"
+        assert "office-printer" in acknowledgement["detail"]
+
+
+def test_subscription_message_missing_api_key_returns_validation_error() -> None:
+    with client.websocket_connect("/ws/printer-client-missing-key") as printer_ws:
+        assert printer_ws.receive_json()["code"] == "info"
+
+        printer_ws.send_json({"printer_name": "office-printer"})
+        failure = printer_ws.receive_json()
+
+        assert failure["kind"] == "status"
+        assert failure["code"] == "validation_error"
+
+
 def test_sender_gets_status_when_recipient_missing() -> None:
     with client.websocket_connect("/ws/charlie") as charlie_ws:
         assert charlie_ws.receive_json()["code"] == "info"

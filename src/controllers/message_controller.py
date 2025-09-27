@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import WebSocket
 
-from src.models.message import InboundMessage, OutboundMessage, StatusMessage
+from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
 
 
 class RecipientNotConnectedError(RuntimeError):
@@ -21,6 +21,7 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._connections: Dict[str, List[WebSocket]] = defaultdict(list)
         self._lock = asyncio.Lock()
+        self._subscriptions: Dict[int, SubscriptionRequest] = {}
 
     async def connect(self, user_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -34,8 +35,16 @@ class ConnectionManager:
                 return
             if websocket in sockets:
                 sockets.remove(websocket)
+                self._subscriptions.pop(id(websocket), None)
             if not sockets:
                 self._connections.pop(user_id, None)
+
+    async def register_subscription(self, websocket: WebSocket, subscription: SubscriptionRequest) -> None:
+        async with self._lock:
+            self._subscriptions[id(websocket)] = subscription
+
+    def subscription_for(self, websocket: WebSocket) -> Optional[SubscriptionRequest]:
+        return self._subscriptions.get(id(websocket))
 
     async def send_personal_message(self, sender_id: str, message: InboundMessage) -> None:
         async with self._lock:

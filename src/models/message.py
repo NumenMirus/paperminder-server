@@ -26,7 +26,7 @@ class OutboundMessage(BaseModel):
 class StatusMessage(BaseModel):
     """Payload used to communicate status updates or errors to a websocket client."""
 
-    code: Literal["validation_error", "recipient_not_connected", "info"]
+    code: Literal["validation_error", "recipient_not_connected", "info", "subscription_accepted"]
     detail: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     kind: Literal["status"] = "status"
@@ -46,3 +46,10 @@ class TestMessageRequest(BaseModel):
         min_length=1,
         description="Identifier to include as the sender in the delivered message",
     )
+
+
+class SubscriptionRequest(BaseModel):
+    """Payload used by printers to subscribe to websocket updates."""
+
+    printer_name: str = Field(..., min_length=1, description="Human readable printer identifier")
+    api_key: str = Field(..., min_length=1, description="API key used to authorise the printer subscription")
