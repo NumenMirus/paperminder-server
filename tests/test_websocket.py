@@ -4,19 +4,16 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from src.main import app
+from src.database import MessageLog, session_scope
 
 
-client = TestClient(app)
-
-
-def test_health_check() -> None:
+def test_health_check(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_personal_message_delivery_between_connected_users() -> None:
+def test_personal_message_delivery_between_connected_users(client: TestClient) -> None:
     alice_id = str(uuid4())
     bob_id = str(uuid4())
 
@@ -34,7 +31,7 @@ def test_personal_message_delivery_between_connected_users() -> None:
         assert delivery["message"] == "hello"
 
 
-def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None:
+def test_subscription_message_with_printer_and_api_key_is_acknowledged(client: TestClient) -> None:
     printer_id = str(uuid4())
 
     with client.websocket_connect(f"/ws/{printer_id}") as printer_ws:
@@ -48,7 +45,7 @@ def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None
         assert "office-printer" in acknowledgement["detail"]
 
 
-def test_subscription_message_missing_api_key_returns_validation_error() -> None:
+def test_subscription_message_missing_api_key_returns_validation_error(client: TestClient) -> None:
     printer_id = str(uuid4())
 
     with client.websocket_connect(f"/ws/{printer_id}") as printer_ws:
@@ -61,7 +58,7 @@ def test_subscription_message_missing_api_key_returns_validation_error() -> None
         assert failure["code"] == "validation_error"
 
 
-def test_sender_gets_status_when_recipient_missing() -> None:
+def test_sender_gets_status_when_recipient_missing(client: TestClient) -> None:
     charlie_id = str(uuid4())
     ghost_id = str(uuid4())
 
@@ -76,7 +73,7 @@ def test_sender_gets_status_when_recipient_missing() -> None:
     assert ghost_id in failure["detail"]
 
 
-def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
+def test_http_test_endpoint_delivers_message_to_connected_user(client: TestClient) -> None:
     destiny_id = str(uuid4())
 
     with client.websocket_connect(f"/ws/{destiny_id}") as destiny_ws:
@@ -96,7 +93,7 @@ def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
         assert delivery["message"] == "http says hi"
 
 
-def test_http_test_endpoint_returns_not_found_when_user_absent() -> None:
+def test_http_test_endpoint_returns_not_found_when_user_absent(client: TestClient) -> None:
     phantom_id = str(uuid4())
 
     response = client.post(
@@ -105,3 +102,27 @@ def test_http_test_endpoint_returns_not_found_when_user_absent() -> None:
 
     assert response.status_code == 404
     assert phantom_id in response.json()["detail"]
+
+
+def test_message_persisted_in_database(client: TestClient) -> None:
+    alice_id = str(uuid4())
+    bob_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{alice_id}") as alice_ws, client.websocket_connect(
+        f"/ws/{bob_id}"
+    ) as bob_ws:
+        assert alice_ws.receive_json()["code"] == "info"
+        assert bob_ws.receive_json()["code"] == "info"
+
+        alice_ws.send_json({"recipient_id": bob_id, "sender_name": "Alice", "message": "hi there"})
+        _ = bob_ws.receive_json()
+
+    with session_scope() as session:
+        logs = session.query(MessageLog).all()
+
+    assert len(logs) == 1
+    log = logs[0]
+    assert log.sender_id == alice_id
+    assert log.sender_name == "Alice"
+    assert log.recipient_id == bob_id
+    assert log.message_body == "hi there"

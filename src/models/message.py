@@ -1,10 +1,14 @@
 """Pydantic models that describe inbound and outbound websocket payloads."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class InboundMessage(BaseModel):
@@ -20,7 +24,7 @@ class OutboundMessage(BaseModel):
 
     sender_name: str
     message: str = Field(..., max_length=500)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
     kind: Literal["message"] = "message"
 
 
@@ -29,7 +33,7 @@ class StatusMessage(BaseModel):
 
     code: Literal["validation_error", "recipient_not_connected", "info", "subscription_accepted"]
     detail: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
     kind: Literal["status"] = "status"
 
 

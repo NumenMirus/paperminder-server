@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from typing import Dict, List, Optional
 
 from fastapi import WebSocket
 
+from src.database import persist_message_log
 from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
 
 
@@ -22,6 +24,7 @@ class ConnectionManager:
         self._connections: Dict[str, List[WebSocket]] = defaultdict(list)
         self._lock = asyncio.Lock()
         self._subscriptions: Dict[int, SubscriptionRequest] = {}
+        self._logger = logging.getLogger(__name__)
 
     async def connect(self, user_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -60,6 +63,11 @@ class ConnectionManager:
         payload = outbound.model_dump_json()
         for websocket in recipients:
             await websocket.send_text(payload)
+
+        try:
+            await asyncio.to_thread(persist_message_log, sender_id=sender_id, message=message)
+        except Exception:  # pragma: no cover - logging should not interrupt delivery
+            self._logger.exception("Failed to persist message log")
 
     async def notify(self, websocket: WebSocket, status: StatusMessage) -> None:
         await websocket.send_text(status.model_dump_json())
