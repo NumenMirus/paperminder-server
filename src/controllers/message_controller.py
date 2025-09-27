@@ -47,10 +47,11 @@ class ConnectionManager:
         return self._subscriptions.get(id(websocket))
 
     async def send_personal_message(self, sender_id: str, message: InboundMessage) -> None:
+        recipient_key = str(message.recipient_id)
         async with self._lock:
-            recipients = list(self._connections.get(message.recipient_id, []))
+            recipients = list(self._connections.get(recipient_key, []))
         if not recipients:
-            raise RecipientNotConnectedError(message.recipient_id)
+            raise RecipientNotConnectedError(recipient_key)
 
         outbound = OutboundMessage(
             sender_name=message.sender_name or sender_id,

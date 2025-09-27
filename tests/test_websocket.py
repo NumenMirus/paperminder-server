@@ -1,5 +1,7 @@
 """Integration tests for websocket messaging routes."""
 
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from src.main import app
@@ -15,11 +17,16 @@ def test_health_check() -> None:
 
 
 def test_personal_message_delivery_between_connected_users() -> None:
-    with client.websocket_connect("/ws/alice") as alice_ws, client.websocket_connect("/ws/bob") as bob_ws:
+    alice_id = str(uuid4())
+    bob_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{alice_id}") as alice_ws, client.websocket_connect(
+        f"/ws/{bob_id}"
+    ) as bob_ws:
         assert alice_ws.receive_json()["code"] == "info"
         assert bob_ws.receive_json()["code"] == "info"
 
-        alice_ws.send_json({"recipient_id": "bob", "sender_name": "Alice", "message": "hello"})
+        alice_ws.send_json({"recipient_id": bob_id, "sender_name": "Alice", "message": "hello"})
         delivery = bob_ws.receive_json()
 
         assert delivery["kind"] == "message"
@@ -28,7 +35,9 @@ def test_personal_message_delivery_between_connected_users() -> None:
 
 
 def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None:
-    with client.websocket_connect("/ws/printer-client") as printer_ws:
+    printer_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{printer_id}") as printer_ws:
         assert printer_ws.receive_json()["code"] == "info"
 
         printer_ws.send_json({"printer_name": "office-printer", "api_key": "abc123"})
@@ -40,7 +49,9 @@ def test_subscription_message_with_printer_and_api_key_is_acknowledged() -> None
 
 
 def test_subscription_message_missing_api_key_returns_validation_error() -> None:
-    with client.websocket_connect("/ws/printer-client-missing-key") as printer_ws:
+    printer_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{printer_id}") as printer_ws:
         assert printer_ws.receive_json()["code"] == "info"
 
         printer_ws.send_json({"printer_name": "office-printer"})
@@ -51,24 +62,29 @@ def test_subscription_message_missing_api_key_returns_validation_error() -> None
 
 
 def test_sender_gets_status_when_recipient_missing() -> None:
-    with client.websocket_connect("/ws/charlie") as charlie_ws:
+    charlie_id = str(uuid4())
+    ghost_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{charlie_id}") as charlie_ws:
         assert charlie_ws.receive_json()["code"] == "info"
 
-        charlie_ws.send_json({"recipient_id": "ghost", "sender_name": "Charlie", "message": "ping"})
+        charlie_ws.send_json({"recipient_id": ghost_id, "sender_name": "Charlie", "message": "ping"})
         failure = charlie_ws.receive_json()
 
         assert failure["kind"] == "status"
         assert failure["code"] == "recipient_not_connected"
-        assert "ghost" in failure["detail"]
+    assert ghost_id in failure["detail"]
 
 
 def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
-    with client.websocket_connect("/ws/destiny") as destiny_ws:
+    destiny_id = str(uuid4())
+
+    with client.websocket_connect(f"/ws/{destiny_id}") as destiny_ws:
         assert destiny_ws.receive_json()["code"] == "info"
 
         response = client.post(
             "/test/messages",
-            json={"recipient_id": "destiny", "message": "http says hi", "sender_name": "System"},
+            json={"recipient_id": destiny_id, "message": "http says hi", "sender_name": "System"},
         )
 
         assert response.status_code == 202
@@ -81,9 +97,11 @@ def test_http_test_endpoint_delivers_message_to_connected_user() -> None:
 
 
 def test_http_test_endpoint_returns_not_found_when_user_absent() -> None:
+    phantom_id = str(uuid4())
+
     response = client.post(
-        "/test/messages", json={"recipient_id": "phantom", "message": "boo", "sender_name": "System"}
+        "/test/messages", json={"recipient_id": phantom_id, "message": "boo", "sender_name": "System"}
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"].startswith("Recipient 'phantom'")
+    assert phantom_id in response.json()["detail"]

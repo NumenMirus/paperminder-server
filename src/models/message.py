@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 class InboundMessage(BaseModel):
     """Message schema for data sent by a websocket client."""
 
-    recipient_id: str = Field(..., min_length=1, description="Identifier of the intended recipient")
+    recipient_id: UUID = Field(..., description="Identifier of the intended recipient")
     sender_name: str = Field(..., min_length=1, description="Display name of the sender")
     message: str = Field(..., min_length=1, max_length=500, description="Body of the message to deliver")
 
@@ -35,8 +36,8 @@ class StatusMessage(BaseModel):
 class TestMessageRequest(BaseModel):
     """Request body for sending a test message to a connected websocket user via HTTP."""
 
-    recipient_id: str = Field(
-        ..., min_length=1, description="Identifier of the user who should receive the test message"
+    recipient_id: UUID = Field(
+        ..., description="Identifier of the user who should receive the test message"
     )
     sender_name: str = Field(
         default="system",

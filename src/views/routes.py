@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from json import JSONDecodeError
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
@@ -44,8 +45,9 @@ async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
 
 
 @router.websocket("/ws/{user_id}")
-async def websocket_entrypoint(websocket: WebSocket, user_id: str) -> None:
-    await _manager.connect(user_id, websocket)
+async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
+    user_key = str(user_id)
+    await _manager.connect(user_key, websocket)
     await _manager.notify(
         websocket,
         StatusMessage(code="info", detail="connected"),
@@ -100,7 +102,7 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: str) -> None:
                 continue
 
             try:
-                await _manager.send_personal_message(sender_id=user_id, message=message)
+                await _manager.send_personal_message(sender_id=user_key, message=message)
             except RecipientNotConnectedError:
                 await _manager.notify(
                     websocket,
@@ -110,4 +112,4 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: str) -> None:
                     ),
                 )
     except WebSocketDisconnect:
-        await _manager.disconnect(user_id, websocket)
+        await _manager.disconnect(user_key, websocket)
