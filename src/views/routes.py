@@ -24,7 +24,7 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.post("/test/messages", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/messages", status_code=status.HTTP_202_ACCEPTED)
 async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
     """HTTP endpoint to deliver a test message to a connected websocket client."""
 
