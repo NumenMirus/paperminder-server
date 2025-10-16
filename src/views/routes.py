@@ -22,6 +22,7 @@ from src.models.message import (
 )
 
 router = APIRouter(prefix="/api")
+ws_router = APIRouter()  # No prefix for backward compatibility
 
 _manager = ConnectionManager()
 
@@ -98,7 +99,7 @@ async def delete_printer_endpoint(printer_uuid: UUID) -> None:
         )
 
 
-@router.websocket("/ws/{user_id}")
+@ws_router.websocket("/ws/{user_id}")
 async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
     user_key = str(user_id)
     await _manager.connect(user_key, websocket)

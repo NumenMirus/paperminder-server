@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.database import init_db
-from src.views.routes import router
+from src.views.routes import router, ws_router
 
 
 def create_app(*, database_url: str | None = None) -> FastAPI:
@@ -36,6 +36,7 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
     )
 
     app.include_router(router)
+    app.include_router(ws_router)
     return app
 
 
