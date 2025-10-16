@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
 from src.models.message import InboundMessage, StatusMessage, SubscriptionRequest, TestMessageRequest
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
 
 _manager = ConnectionManager()
 
