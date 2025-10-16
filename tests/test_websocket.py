@@ -97,7 +97,7 @@ def test_http_test_endpoint_returns_not_found_when_user_absent(client: TestClien
     phantom_id = str(uuid4())
 
     response = client.post(
-        "/api/message", json={"recipient_id": phantom_id, "message": "boo", "sender_name": "System"}
+        "/test/messages", json={"recipient_id": phantom_id, "message": "boo", "sender_name": "System"}
     )
 
     assert response.status_code == 404
