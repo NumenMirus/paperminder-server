@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, st
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.database import register_printer, get_all_registered_printers
+from src.database import register_printer, get_all_registered_printers, delete_printer
 from src.models.message import (
     InboundMessage,
     PrinterRegistrationRequest,
@@ -49,7 +49,7 @@ async def send_test_message(payload: MessageRequest) -> dict[str, str]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Recipient '{payload.recipient_id}' is not connected.",
-        ) from exc
+        )
 
     return {"status": "sent"}
 
@@ -85,6 +85,17 @@ async def list_printers() -> list[PrinterResponse]:
         uuid=UUID(printer.uuid),
         location=printer.location
     ) for printer in printers]
+
+
+@router.delete("/printer/{printer_uuid}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_printer_endpoint(printer_uuid: UUID) -> None:
+    """HTTP endpoint to delete a registered printer by UUID."""
+    success = delete_printer(str(printer_uuid))
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Printer with UUID '{printer_uuid}' not found.",
+        )
 
 
 @router.websocket("/ws/{user_id}")

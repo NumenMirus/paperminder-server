@@ -154,6 +154,19 @@ async def get_all_registered_printers() -> list[Printer]:
     with session_scope() as session:
         printers = session.query(Printer).all()
         return printers
+
+
+def delete_printer(uuid: str) -> bool:
+    """Delete a printer from the database by UUID.
+    
+    Returns True if the printer was deleted, False if not found.
+    """
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=uuid).first()
+        if printer is None:
+            return False
+        session.delete(printer)
+        return True
     
 
 def reset_database(database_url: str | None = None) -> None:
