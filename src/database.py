@@ -38,6 +38,19 @@ class MessageLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 
+class Printer(Base):
+    """ORM model representing a registered printer."""
+
+    __tablename__ = "printers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, index=True)
+    location: Mapped[str] = mapped_column(String(256), nullable=False)
+    user_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 _configured_url: str | None = None
@@ -117,6 +130,22 @@ def persist_message_log(sender_id: str, message: InboundMessage) -> None:
                 message_body=message.message,
             )
         )
+
+
+def register_printer(name: str, uuid: str, location: str, user_uuid: str) -> Printer:
+    """Register a new printer in the database."""
+
+    with session_scope() as session:
+        printer = Printer(
+            name=name,
+            uuid=uuid,
+            location=location,
+            user_uuid=user_uuid,
+        )
+        session.add(printer)
+        session.flush()
+        session.refresh(printer)
+        return printer
 
 
 def reset_database(database_url: str | None = None) -> None:

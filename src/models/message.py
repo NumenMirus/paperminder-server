@@ -58,3 +58,23 @@ class SubscriptionRequest(BaseModel):
 
     printer_name: str = Field(..., min_length=1, description="Human readable printer identifier")
     api_key: str = Field(..., min_length=1, description="API key used to authorise the printer subscription")
+
+
+class PrinterRegistrationRequest(BaseModel):
+    """Request body for registering a new printer."""
+
+    name: str = Field(..., min_length=1, max_length=128, description="Name of the printer")
+    uuid: UUID = Field(..., description="Unique identifier for the printer")
+    location: str = Field(..., min_length=1, max_length=256, description="Physical location of the printer")
+    user_uuid: UUID = Field(..., description="UUID of the user who owns the printer")
+
+
+class PrinterRegistrationResponse(BaseModel):
+    """Response after successfully registering a printer."""
+
+    id: int = Field(..., description="Database ID of the registered printer")
+    name: str
+    uuid: UUID
+    location: str
+    user_uuid: UUID
+    created_at: datetime

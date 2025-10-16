@@ -10,7 +10,15 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, st
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.models.message import InboundMessage, StatusMessage, SubscriptionRequest, TestMessageRequest
+from src.database import register_printer
+from src.models.message import (
+    InboundMessage,
+    PrinterRegistrationRequest,
+    PrinterRegistrationResponse,
+    StatusMessage,
+    SubscriptionRequest,
+    TestMessageRequest,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -42,6 +50,27 @@ async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
         ) from exc
 
     return {"status": "sent"}
+
+
+@router.post("/printer/register", status_code=status.HTTP_201_CREATED, response_model=PrinterRegistrationResponse)
+async def register_printer_endpoint(payload: PrinterRegistrationRequest) -> PrinterRegistrationResponse:
+    """HTTP endpoint to register a new printer in the system."""
+
+    printer = register_printer(
+        name=payload.name,
+        uuid=str(payload.uuid),
+        location=payload.location,
+        user_uuid=str(payload.user_uuid),
+    )
+    
+    return PrinterRegistrationResponse(
+        id=printer.id,
+        name=printer.name,
+        uuid=payload.uuid,
+        location=printer.location,
+        user_uuid=payload.user_uuid,
+        created_at=printer.created_at,
+    )
 
 
 @router.websocket("/ws/{user_id}")
