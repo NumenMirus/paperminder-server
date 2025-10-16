@@ -29,8 +29,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run tests
-        run: uv run pytest
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

@@ -116,6 +116,7 @@ def session_scope() -> Generator[Session, None, None]:
 def init_db(database_url: str | None = None) -> None:
     configure_database(database_url)
     Base.metadata.create_all(bind=get_engine())
+    print("Database initialized.")
 
 
 def persist_message_log(sender_id: str, message: InboundMessage) -> None:
@@ -146,7 +147,14 @@ def register_printer(name: str, uuid: str, location: str, user_uuid: str) -> Pri
         session.flush()
         session.refresh(printer)
         return printer
+    
 
+async def get_all_registered_printers() -> list[Printer]:
+    """Retrieve all registered printers from the database."""
+    with session_scope() as session:
+        printers = session.query(Printer).all()
+        return printers
+    
 
 def reset_database(database_url: str | None = None) -> None:
     """Drop and recreate the schema. Intended for tests."""

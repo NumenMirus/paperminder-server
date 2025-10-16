@@ -10,14 +10,15 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, st
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.database import register_printer
+from src.database import register_printer, get_all_registered_printers
 from src.models.message import (
     InboundMessage,
     PrinterRegistrationRequest,
     PrinterRegistrationResponse,
     StatusMessage,
     SubscriptionRequest,
-    TestMessageRequest,
+    MessageRequest,
+    PrinterResponse
 )
 
 router = APIRouter(prefix="/api")
@@ -33,7 +34,7 @@ async def health_check() -> dict[str, str]:
 
 
 @router.post("/message", status_code=status.HTTP_202_ACCEPTED)
-async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
+async def send_test_message(payload: MessageRequest) -> dict[str, str]:
     """HTTP endpoint to deliver a test message to a connected websocket client."""
 
     inbound = InboundMessage(
@@ -41,6 +42,7 @@ async def send_test_message(payload: TestMessageRequest) -> dict[str, str]:
         sender_name=payload.sender_name,
         message=payload.message,
     )
+
     try:
         await _manager.send_personal_message(sender_id=payload.sender_name, message=inbound)
     except RecipientNotConnectedError as exc:
@@ -71,6 +73,18 @@ async def register_printer_endpoint(payload: PrinterRegistrationRequest) -> Prin
         user_uuid=payload.user_uuid,
         created_at=printer.created_at,
     )
+
+
+@router.get("/printers", status_code=status.HTTP_200_OK)
+async def list_printers() -> list[PrinterResponse]:
+    """HTTP endpoint to list all registered printers."""
+    printers = await get_all_registered_printers()  # Replace with actual retrieval logic
+    return [PrinterResponse(
+        id=printer.id,
+        name=printer.name,
+        uuid=UUID(printer.uuid),
+        location=printer.location
+    ) for printer in printers]
 
 
 @router.websocket("/ws/{user_id}")

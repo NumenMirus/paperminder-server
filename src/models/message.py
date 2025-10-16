@@ -37,7 +37,7 @@ class StatusMessage(BaseModel):
     kind: Literal["status"] = "status"
 
 
-class TestMessageRequest(BaseModel):
+class MessageRequest(BaseModel):
     """Request body for sending a test message to a connected websocket user via HTTP."""
 
     recipient_id: UUID = Field(
@@ -78,3 +78,11 @@ class PrinterRegistrationResponse(BaseModel):
     location: str
     user_uuid: UUID
     created_at: datetime
+
+class PrinterResponse(BaseModel):
+    """Response model for a registered printer."""
+
+    id: int
+    name: str
+    uuid: UUID
+    location: str
