@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, st
 from pydantic import ValidationError
 
 from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
-from src.database import register_printer, get_all_registered_printers, delete_printer
+from src.services import PrinterService, MessageService
 from src.models.message import (
     InboundMessage,
     PrinterRegistrationRequest,
@@ -59,7 +59,7 @@ async def send_test_message(payload: MessageRequest) -> dict[str, str]:
 async def register_printer_endpoint(payload: PrinterRegistrationRequest) -> PrinterRegistrationResponse:
     """HTTP endpoint to register a new printer in the system."""
 
-    printer = register_printer(
+    printer = PrinterService.register(
         name=payload.name,
         uuid=str(payload.uuid),
         location=payload.location,
@@ -79,7 +79,7 @@ async def register_printer_endpoint(payload: PrinterRegistrationRequest) -> Prin
 @router.get("/printers", status_code=status.HTTP_200_OK)
 async def list_printers() -> list[PrinterResponse]:
     """HTTP endpoint to list all registered printers."""
-    printers = await get_all_registered_printers()  # Replace with actual retrieval logic
+    printers = await PrinterService.get_all()
     return [PrinterResponse(
         id=printer.id,
         name=printer.name,
@@ -91,7 +91,7 @@ async def list_printers() -> list[PrinterResponse]:
 @router.delete("/printer/{printer_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_printer_endpoint(printer_uuid: UUID) -> None:
     """HTTP endpoint to delete a registered printer by UUID."""
-    success = delete_printer(str(printer_uuid))
+    success = PrinterService.delete(str(printer_uuid))
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -107,6 +107,9 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
         websocket,
         StatusMessage(code="info", detail="connected"),
     )
+    
+    # Send any cached messages the user may have missed while offline
+    await _manager.send_cached_messages(user_key, websocket)
 
     try:
         while True:
