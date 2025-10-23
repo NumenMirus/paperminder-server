@@ -11,10 +11,27 @@ from src.database import (
     clear_old_cached_messages,
 )
 from src.models.message import InboundMessage
+from src.utils import MessageSanitizer
 
 
 class MessageService:
     """Service for managing message operations and caching."""
+
+    @staticmethod
+    def sanitize_incoming_message(sender_name: str, message_body: str) -> tuple[str, str]:
+        """Sanitize incoming message content.
+        
+        Args:
+            sender_name: Name of the message sender
+            message_body: The message content
+            
+        Returns:
+            Tuple of (sanitized_sender_name, sanitized_message_body)
+        """
+        return (
+            MessageSanitizer.sanitize_name(sender_name),
+            MessageSanitizer.sanitize_message(message_body),
+        )
 
     @staticmethod
     def cache_message_fn(recipient_id: str, sender_id: str, sender_name: str, message_body: str) -> MessageCache:
@@ -29,7 +46,11 @@ class MessageService:
         Returns:
             The cached MessageCache object
         """
-        return cache_message(recipient_id, sender_id, sender_name, message_body)
+        # Sanitize the message before caching
+        sanitized_sender_name, sanitized_message_body = MessageService.sanitize_incoming_message(
+            sender_name, message_body
+        )
+        return cache_message(recipient_id, sender_id, sanitized_sender_name, sanitized_message_body)
 
     @staticmethod
     def get_cached_messages_fn(recipient_id: str) -> list[MessageCache]:
@@ -63,7 +84,18 @@ class MessageService:
             sender_id: ID of the sender
             message: The InboundMessage object to log
         """
-        persist_message_log(sender_id, message)
+        # Create a sanitized copy of the message before logging
+        sanitized_sender_name, sanitized_message_body = MessageService.sanitize_incoming_message(
+            message.sender_name, message.message
+        )
+        
+        # Create a modified message with sanitized content
+        sanitized_message = InboundMessage(
+            recipient_id=message.recipient_id,
+            sender_name=sanitized_sender_name,
+            message=sanitized_message_body,
+        )
+        persist_message_log(sender_id, sanitized_message)
 
     @staticmethod
     def cleanup_old_cache(days: int = 7) -> int:

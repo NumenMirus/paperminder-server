@@ -54,9 +54,14 @@ class ConnectionManager:
         async with self._lock:
             recipients = list(self._connections.get(recipient_key, []))
         
+        # Sanitize the message
+        sanitized_sender_name, sanitized_message_body = MessageService.sanitize_incoming_message(
+            message.sender_name or sender_id, message.message
+        )
+        
         outbound = OutboundMessage(
-            sender_name=message.sender_name or sender_id,
-            message=message.message,
+            sender_name=sanitized_sender_name,
+            message=sanitized_message_body,
         )
         payload = outbound.model_dump_json()
         
@@ -71,8 +76,8 @@ class ConnectionManager:
                     MessageService.cache_message_fn,
                     recipient_id=recipient_key,
                     sender_id=sender_id,
-                    sender_name=message.sender_name or sender_id,
-                    message_body=message.message,
+                    sender_name=sanitized_sender_name,
+                    message_body=sanitized_message_body,
                 )
             except Exception:
                 self._logger.exception("Failed to cache message")
