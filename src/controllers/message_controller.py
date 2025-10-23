@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 from fastapi import WebSocket
 
-from src.database import persist_message_log
+from src.services import MessageService
 from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
 
 
@@ -53,24 +53,58 @@ class ConnectionManager:
         recipient_key = str(message.recipient_id)
         async with self._lock:
             recipients = list(self._connections.get(recipient_key, []))
-        if not recipients:
-            raise RecipientNotConnectedError(recipient_key)
-
+        
         outbound = OutboundMessage(
             sender_name=message.sender_name or sender_id,
             message=message.message,
         )
         payload = outbound.model_dump_json()
-        for websocket in recipients:
-            await websocket.send_text(payload)
+        
+        # If recipients are online, send the message
+        if recipients:
+            for websocket in recipients:
+                await websocket.send_text(payload)
+        else:
+            # Cache the message for when the recipient comes back online
+            try:
+                await asyncio.to_thread(
+                    MessageService.cache_message_fn,
+                    recipient_id=recipient_key,
+                    sender_id=sender_id,
+                    sender_name=message.sender_name or sender_id,
+                    message_body=message.message,
+                )
+            except Exception:
+                self._logger.exception("Failed to cache message")
+            raise RecipientNotConnectedError(recipient_key)
 
         try:
-            await asyncio.to_thread(persist_message_log, sender_id=sender_id, message=message)
+            await asyncio.to_thread(MessageService.persist_log, sender_id=sender_id, message=message)
         except Exception:  # pragma: no cover - logging should not interrupt delivery
             self._logger.exception("Failed to persist message log")
 
     async def notify(self, websocket: WebSocket, status: StatusMessage) -> None:
         await websocket.send_text(status.model_dump_json())
+
+    async def send_cached_messages(self, user_id: str, websocket: WebSocket) -> None:
+        """Send all cached messages to a user who just came online."""
+        try:
+            cached_messages = await asyncio.to_thread(MessageService.get_cached_messages_fn, user_id)
+            
+            if cached_messages:
+                for cached in cached_messages:
+                    outbound = OutboundMessage(
+                        sender_name=cached.sender_name,
+                        message=cached.message_body,
+                        timestamp=cached.created_at,
+                    )
+                    await websocket.send_text(outbound.model_dump_json())
+                
+                # Mark all cached messages as delivered
+                await asyncio.to_thread(MessageService.mark_as_delivered, user_id)
+                self._logger.info(f"Sent {len(cached_messages)} cached messages to user {user_id}")
+        except Exception:
+            self._logger.exception(f"Failed to send cached messages to user {user_id}")
 
     def count_active(self, user_id: str) -> int:
         return len(self._connections.get(user_id, []))

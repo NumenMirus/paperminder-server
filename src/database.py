@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Generator
 
-from sqlalchemy import DateTime, Integer, String, Text, create_engine
+from sqlalchemy import DateTime, Integer, String, Text, Boolean, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -49,6 +49,20 @@ class Printer(Base):
     location: Mapped[str] = mapped_column(String(256), nullable=False)
     user_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
+class MessageCache(Base):
+    """ORM model for caching messages sent to offline printers."""
+
+    __tablename__ = "message_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recipient_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    sender_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    sender_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    message_body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    is_delivered: Mapped[bool] = mapped_column(default=False, index=True)
 
 
 _engine: Engine | None = None
@@ -167,6 +181,59 @@ def delete_printer(uuid: str) -> bool:
             return False
         session.delete(printer)
         return True
+
+
+def cache_message(recipient_id: str, sender_id: str, sender_name: str, message_body: str) -> MessageCache:
+    """Store a message in the cache for a recipient who may be offline."""
+    with session_scope() as session:
+        cache_entry = MessageCache(
+            recipient_id=recipient_id,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            message_body=message_body,
+        )
+        session.add(cache_entry)
+        session.flush()
+        session.refresh(cache_entry)
+        return cache_entry
+
+
+def get_cached_messages(recipient_id: str) -> list[MessageCache]:
+    """Retrieve undelivered cached messages for a recipient."""
+    with session_scope() as session:
+        messages = session.query(MessageCache).filter_by(
+            recipient_id=recipient_id,
+            is_delivered=False
+        ).order_by(MessageCache.created_at).all()
+        return messages
+
+
+def mark_cached_messages_as_delivered(recipient_id: str) -> int:
+    """Mark all cached messages for a recipient as delivered.
+    
+    Returns the count of messages marked as delivered.
+    """
+    with session_scope() as session:
+        count = session.query(MessageCache).filter_by(
+            recipient_id=recipient_id,
+            is_delivered=False
+        ).update({"is_delivered": True})
+        return count
+
+
+def clear_old_cached_messages(days: int = 7) -> int:
+    """Delete cached messages older than specified days.
+    
+    Returns the count of messages deleted.
+    """
+    from datetime import timedelta
+    with session_scope() as session:
+        cutoff_date = datetime.now(UTC) - timedelta(days=days)
+        count = session.query(MessageCache).filter(
+            MessageCache.created_at < cutoff_date,
+            MessageCache.is_delivered == True
+        ).delete()
+        return count
     
 
 def reset_database(database_url: str | None = None) -> None:
