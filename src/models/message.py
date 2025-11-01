@@ -17,6 +17,7 @@ class InboundMessage(BaseModel):
     recipient_id: UUID = Field(..., description="Identifier of the intended recipient")
     sender_name: str = Field(..., min_length=1, description="Display name of the sender")
     message: str = Field(..., min_length=1, max_length=500, description="Body of the message to deliver")
+    kind: Literal["message"] = "message"
 
 
 class OutboundMessage(BaseModel):
