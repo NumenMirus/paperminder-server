@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.database import init_db
-from src.views.routes import (
+from src.views import (
     health_router,
     printer_router,
     message_router,
