@@ -37,7 +37,7 @@ async def register_printer_endpoint(payload: PrinterRegistrationRequest) -> Prin
     )
 
 
-@router.get("s", status_code=status.HTTP_200_OK, tags=["printer"])
+@router.get("/list", status_code=status.HTTP_200_OK, tags=["printer"])
 async def list_printers() -> list[PrinterResponse]:
     """HTTP endpoint to list all registered printers."""
     printers = await PrinterService.get_all()
