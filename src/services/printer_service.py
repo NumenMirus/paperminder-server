@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from src.database import (
-    Printer,
+from src.database import Printer, session_scope
+from src.crud import (
     register_printer,
     get_all_registered_printers,
     delete_printer,
-    session_scope,
 )
 
 

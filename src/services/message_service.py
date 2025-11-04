@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.database import (
-    MessageCache,
+from src.database import MessageCache
+from src.crud import (
     persist_message_log,
     cache_message,
     get_cached_messages,
