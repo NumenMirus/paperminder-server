@@ -5,6 +5,7 @@ from src.models.message import (
     InboundMessage,
     MessageRequest,
 )
+from src.crud import can_user_message_printer
 
 
 router = APIRouter(prefix="/api", tags=["message"])
@@ -14,7 +15,18 @@ _manager = ConnectionManager()
 
 @router.post("/message", status_code=status.HTTP_202_ACCEPTED)
 async def send_test_message(payload: MessageRequest) -> dict[str, str]:
-    """HTTP endpoint to deliver a test message to a connected websocket client."""
+    """HTTP endpoint to deliver a test message to a connected websocket client.
+    
+    Permission check: Only the printer owner or users in the same group can send messages to the printer.
+    """
+
+    # Check if the sender has permission to send messages to this printer
+    if not can_user_message_printer(str(payload.sender_uuid), str(payload.recipient_id)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to send messages to this printer. "
+                   "Only the printer owner or users in the same group can send messages.",
+        )
 
     inbound = InboundMessage(
         recipient_id=payload.recipient_id,

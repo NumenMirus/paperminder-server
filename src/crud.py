@@ -752,6 +752,43 @@ def is_printer_in_group(printer_uuid: str, group_uuid: str) -> bool:
         return membership is not None
 
 
+def can_user_message_printer(user_uuid: str, printer_uuid: str) -> bool:
+    """Check if a user can send messages to a printer.
+
+    A user can send messages to a printer if:
+    1. The user owns the printer, OR
+    2. The user is in a group that the printer belongs to
+
+    Args:
+        user_uuid: The UUID of the user
+        printer_uuid: The UUID of the printer
+
+    Returns:
+        True if the user can send messages to the printer, False otherwise
+    """
+    with session_scope() as session:
+        # Check if user is the owner of the printer
+        printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
+        if printer is None:
+            return False
+
+        if printer.user_uuid == user_uuid:
+            return True
+
+        # Check if user is in any of the groups that the printer belongs to
+        printer_groups = session.query(PrinterGroup).filter_by(printer_uuid=printer_uuid).all()
+        if not printer_groups:
+            return False
+
+        group_uuids = [pg.group_uuid for pg in printer_groups]
+
+        for group_uuid in group_uuids:
+            if is_user_in_group(user_uuid, group_uuid):
+                return True
+
+        return False
+
+
 # ============================================================================
 # MESSAGE CACHE CRUD OPERATIONS
 # ============================================================================
