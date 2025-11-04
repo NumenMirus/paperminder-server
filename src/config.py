@@ -1,5 +1,3 @@
-
-
 from authx import AuthX, AuthXConfig
 
 

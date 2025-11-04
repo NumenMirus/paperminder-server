@@ -16,7 +16,7 @@ class InboundMessage(BaseModel):
 
     recipient_id: UUID = Field(..., description="Identifier of the intended recipient")
     sender_name: str = Field(..., min_length=1, description="Display name of the sender")
-    message: str = Field(..., min_length=1, max_length=500, description="Body of the message to deliver")
+    message: str = Field(..., min_length=1, max_length=512, description="Body of the message to deliver")
     kind: Literal["message"] = "message"
 
 
@@ -42,7 +42,10 @@ class MessageRequest(BaseModel):
     """Request body for sending a test message to a connected websocket user via HTTP."""
 
     recipient_id: UUID = Field(
-        ..., description="Identifier of the user who should receive the test message"
+        ..., description="Identifier of the printer/user who should receive the test message"
+    )
+    sender_uuid: UUID = Field(
+        ..., description="UUID of the user sending the message (must be printer owner or in same group)"
     )
     sender_name: str = Field(
         default="system",
