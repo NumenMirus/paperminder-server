@@ -135,17 +135,45 @@ def login(payload: UserLoginRequest) -> UserLoginResponse:
     )
 
 
-@router.get("/protected", dependencies=[Depends(auth.get_token_from_request)])
-def get_protected(token: RequestToken = Depends()):
-    """Protected endpoint that requires authentication.
+@router.get("/me", status_code=status.HTTP_200_OK)
+def get_user_info(token: RequestToken = Depends(auth.get_token_from_request)):
+    """Get information about the currently authenticated user.
     
-    Requires: Valid JWT token in Authorization header
+    Requires authentication via JWT token in Authorization header.
+    
+    Returns:
+        UserResponse with user data
+        
+    Raises:
+        HTTPException 401: If token is invalid or expired
+        HTTPException 404: If user not found
     """
     try:
+        # Verify token validity
         auth.verify_token(token=token)
-        return {"message": "Hello world !"}
+        # Extract user UUID from token payload
+        # RequestToken is a dict-like object with user info
+        user_uuid = token["uid"] if isinstance(token, dict) else str(token)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": str(e)}
+            detail="Invalid or expired token",
         ) from e
+    
+    # Get user from database
+    user = get_user(uuid=user_uuid)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    return UserResponse(
+        uuid=UUID(user.uuid),
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        phone=user.phone,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
