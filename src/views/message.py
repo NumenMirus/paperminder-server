@@ -21,12 +21,12 @@ async def send_message(payload: MessageRequest) -> dict[str, str]:
     """
 
     # Check if the sender has permission to send messages to this printer
-    if not can_user_message_printer(str(payload.sender_uuid), str(payload.recipient_id)):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to send messages to this printer. "
-                   "Only the printer owner or users in the same group can send messages.",
-        )
+    # if not can_user_message_printer(str(payload.sender_uuid), str(payload.recipient_id)):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="You do not have permission to send messages to this printer. "
+    #                "Only the printer owner or users in the same group can send messages.",
+    #     )
 
     inbound = InboundMessage(
         recipient_id=payload.recipient_id,
