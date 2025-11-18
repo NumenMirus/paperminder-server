@@ -26,7 +26,7 @@ class OutboundMessage(BaseModel):
     sender_name: str
     message: str = Field(..., max_length=500)
     timestamp: datetime = Field(default_factory=_utcnow)
-    kind: Literal["message"] = "message"
+    kind: Literal["message", "bitmap"] = "message"
     daily_number: int = Field(..., description="Progressive message number that resets daily for the recipient")
 
 
