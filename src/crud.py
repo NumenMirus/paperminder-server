@@ -875,3 +875,39 @@ def clear_old_cached_messages(days: int = 7) -> int:
             .delete()
         )
         return count
+
+
+def get_and_increment_daily_message_number(printer_uuid: str) -> int:
+    """Get the next daily message number for a printer, resetting if necessary.
+    
+    Checks if the printer's last reset date is before today (in UTC).
+    If so, resets the counter to 1 and updates the reset date.
+    Otherwise, increments the counter and returns the new value.
+    
+    Args:
+        printer_uuid: The UUID of the printer
+        
+    Returns:
+        The next daily message number for the printer
+    """
+    from datetime import date, timedelta
+
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
+        if not printer:
+            raise ValueError(f"Printer with UUID {printer_uuid} not found")
+        
+        today = _utcnow().date()
+        last_reset = printer.last_message_number_reset_date.date() if printer.last_message_number_reset_date else None
+        
+        # Reset counter if last reset was on a different day
+        if last_reset != today:
+            printer.daily_message_number = 1
+            printer.last_message_number_reset_date = _utcnow()
+        else:
+            # Increment counter for the same day
+            printer.daily_message_number += 1
+        
+        session.flush()
+        current_number = printer.daily_message_number
+        return current_number

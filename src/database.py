@@ -167,6 +167,10 @@ class Printer(Base):
     location: Mapped[str] = mapped_column(String(256), nullable=False)
     user_uuid: Mapped[str] = mapped_column(String(36), ForeignKey("users.uuid"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    
+    # Daily message number tracking
+    daily_message_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_message_number_reset_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     owner: Mapped[User] = relationship("User", foreign_keys=[user_uuid], backref="owned_printers")

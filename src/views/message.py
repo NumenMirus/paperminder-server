@@ -14,8 +14,8 @@ _manager = ConnectionManager()
 
 
 @router.post("/message", status_code=status.HTTP_202_ACCEPTED)
-async def send_test_message(payload: MessageRequest) -> dict[str, str]:
-    """HTTP endpoint to deliver a test message to a connected websocket client.
+async def send_message(payload: MessageRequest) -> dict[str, str]:
+    """HTTP endpoint to deliver a message to a connected websocket client.
     
     Permission check: Only the printer owner or users in the same group can send messages to the printer.
     """

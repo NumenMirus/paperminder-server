@@ -11,6 +11,7 @@ from fastapi import WebSocket
 
 from src.services import MessageService
 from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
+from src.crud import get_and_increment_daily_message_number
 
 
 class RecipientNotConnectedError(RuntimeError):
@@ -59,9 +60,16 @@ class ConnectionManager:
             message.sender_name or sender_id, message.message
         )
         
+        # Get the next daily message number for the recipient
+        daily_number = await asyncio.to_thread(
+            get_and_increment_daily_message_number,
+            recipient_key
+        )
+        
         outbound = OutboundMessage(
             sender_name=sanitized_sender_name,
             message=sanitized_message_body,
+            daily_number=daily_number,
         )
         payload = outbound.model_dump_json()
         
@@ -98,10 +106,16 @@ class ConnectionManager:
             
             if cached_messages:
                 for cached in cached_messages:
+                    # Get the next daily message number for each cached message
+                    daily_number = await asyncio.to_thread(
+                        get_and_increment_daily_message_number,
+                        user_id
+                    )
                     outbound = OutboundMessage(
                         sender_name=cached.sender_name,
                         message=cached.message_body,
                         timestamp=cached.created_at,
+                        daily_number=daily_number,
                     )
                     await websocket.send_text(outbound.model_dump_json())
                 
