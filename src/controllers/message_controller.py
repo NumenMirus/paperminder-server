@@ -130,3 +130,7 @@ class ConnectionManager:
 
     def has_active_user(self, user_id: str) -> bool:
         return bool(self._connections.get(user_id))
+
+
+# Single shared manager instance reused by HTTP and websocket routes.
+connection_manager = ConnectionManager()

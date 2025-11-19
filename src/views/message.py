@@ -1,6 +1,6 @@
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
-from src.controllers.message_controller import ConnectionManager, RecipientNotConnectedError
+from src.controllers.message_controller import connection_manager, RecipientNotConnectedError
 from src.models.message import (
     InboundMessage,
     MessageRequest,
@@ -9,8 +9,6 @@ from src.crud import can_user_message_printer
 
 
 router = APIRouter(prefix="/api", tags=["message"])
-
-_manager = ConnectionManager()
 
 
 @router.post("/message", status_code=status.HTTP_202_ACCEPTED)
@@ -35,7 +33,7 @@ async def send_message(payload: MessageRequest) -> dict[str, str]:
     )
 
     try:
-        await _manager.send_personal_message(sender_id=payload.sender_name, message=inbound)
+        await connection_manager.send_personal_message(sender_id=payload.sender_name, message=inbound)
 
     except RecipientNotConnectedError as exc:
         raise HTTPException(
