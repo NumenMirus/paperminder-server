@@ -12,10 +12,7 @@ from fastapi import WebSocket
 from src.services import MessageService
 from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
 from src.crud import get_and_increment_daily_message_number
-
-
-class RecipientNotConnectedError(RuntimeError):
-    """Raised when a sender attempts to reach a recipient without active connections."""
+from src.exceptions import RecipientNotConnectedError, RecipientNotFoundError
 
 
 class ConnectionManager:
