@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserRegistrationRequest(BaseModel):
@@ -30,12 +30,22 @@ class UserRegistrationRequest(BaseModel):
     full_name: str | None = Field(None, max_length=256, description="Full name (optional)")
     phone: str | None = Field(None, max_length=20, description="Phone number (optional)")
 
+    @field_validator('username')
+    @classmethod
+    def transform_username_to_lowercase(cls, v: str) -> str:
+        return v.lower()
+
 
 class UserLoginRequest(BaseModel):
     """Request body for user login."""
 
-    username: str = Field(..., min_length=1, description="Username")
-    password: str = Field(..., min_length=1, description="Password")
+    username: str = Field(..., min_length=2, description="Username")
+    password: str = Field(..., min_length=4, description="Password")
+
+    @field_validator('username')
+    @classmethod
+    def transform_username_to_lowercase(cls, v: str) -> str:
+        return v.lower()
 
 
 class UserResponse(BaseModel):
