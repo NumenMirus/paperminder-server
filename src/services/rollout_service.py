@@ -150,18 +150,13 @@ class RolloutService:
         unique_printers = list({p.uuid: p for p in target_printers}.values())
 
         # Update rollout counters
-        with RolloutService._get_session() as session:
+        from src.database import session_scope
+        with session_scope() as session:
             rollout = session.query(UpdateRollout).filter_by(id=rollout.id).first()
             if rollout:
                 rollout.total_targets = len(unique_printers)
                 rollout.pending_count = len(unique_printers)
                 session.flush()
-
-    @staticmethod
-    def _get_session():
-        """Get database session context manager."""
-        from src.database import session_scope
-        return session_scope()
 
     @staticmethod
     def get_rollout(rollout_id: int) -> UpdateRollout | None:
