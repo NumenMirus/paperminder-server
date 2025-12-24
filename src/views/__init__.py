@@ -6,6 +6,7 @@ from .printer import router as printer_router
 from .message import router as message_router
 from .ws import ws_router
 from .auth import router as auth_router
+from .firmware import router as firmware_router
 
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "message_router",
     "ws_router",
     "auth_router",
+    "firmware_router",
 ]
