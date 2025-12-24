@@ -101,14 +101,20 @@ class RolloutService:
         Args:
             rollout: The rollout to calculate targets for
         """
+        import json
+        # Parse JSON fields
+        target_user_ids = json.loads(rollout.target_user_ids) if rollout.target_user_ids else None
+        target_printer_ids = json.loads(rollout.target_printer_ids) if rollout.target_printer_ids else None
+        target_channels = json.loads(rollout.target_channels) if rollout.target_channels else None
+
         # Build filter criteria
         filters = {}
 
-        if rollout.target_channels:
+        if target_channels:
             # For channel-based targeting, we need to get printers matching those channels
             # This is handled by iterating through channels
             target_printers = []
-            for channel in rollout.target_channels:
+            for channel in target_channels:
                 channel_printers = get_printers_by_filters(channel=channel)
                 target_printers.extend(channel_printers)
 
@@ -124,16 +130,16 @@ class RolloutService:
                 target_printers = filtered_printers
         elif rollout.target_all:
             target_printers = get_printers_by_filters()
-        elif rollout.target_user_ids:
+        elif target_user_ids:
             # Target specific users
             target_printers = []
-            for user_uuid in rollout.target_user_ids:
+            for user_uuid in target_user_ids:
                 user_printers = get_printers_by_filters(user_uuid=user_uuid)
                 target_printers.extend(user_printers)
-        elif rollout.target_printer_ids:
+        elif target_printer_ids:
             # Target specific printers
             target_printers = []
-            for printer_uuid in rollout.target_printer_ids:
+            for printer_uuid in target_printer_ids:
                 printer = get_printer(printer_uuid)
                 if printer:
                     target_printers.append(printer)

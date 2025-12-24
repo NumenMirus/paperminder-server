@@ -144,11 +144,9 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
             )
 
     except ValidationError as exc:
-        # Send error notification back to printer
-        await connection_manager.notify(
-            None,  # No specific websocket, need to handle this differently
-            StatusMessage(code="validation_error", detail=str(exc)),
-        )
+        # Log validation error - can't send notification without websocket reference
+        import logging
+        logging.getLogger(__name__).error(f"Firmware message validation error: {exc}")
     except Exception as exc:
         # Log error but don't send notification to avoid infinite loop
         import logging

@@ -1,4 +1,17 @@
 from authx import AuthX, AuthXConfig
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """Application settings."""
+
+    # Base configuration
+    base_url: str = "http://localhost:8000"
+    max_firmware_size: int = 5 * 1024 * 1024  # 5MB
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
 auth_config = AuthXConfig(
@@ -8,3 +21,19 @@ auth_config = AuthXConfig(
     )
 
 auth = AuthX(config=auth_config)
+
+
+# Global settings instance
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """Get application settings.
+
+    Returns:
+        Settings instance
+    """
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings

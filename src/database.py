@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Generator
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey, ARRAY
+from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker, relationship
 from passlib.context import CryptContext
@@ -240,11 +240,11 @@ class UpdateRollout(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     firmware_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("firmware_versions.id"), nullable=False, index=True)
 
-    # Targeting
+    # Targeting (stored as JSON strings for SQLite compatibility)
     target_all: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    target_user_ids: Mapped[str | None] = mapped_column(ARRAY(String), nullable=True)  # JSON array of user IDs
-    target_printer_ids: Mapped[str | None] = mapped_column(ARRAY(String), nullable=True)  # JSON array of printer IDs
-    target_channels: Mapped[str | None] = mapped_column(ARRAY(String), nullable=True)  # JSON array of channels
+    target_user_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of user IDs
+    target_printer_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of printer IDs
+    target_channels: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of channels
     min_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     max_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
