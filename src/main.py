@@ -2,7 +2,6 @@ from __future__ import annotations
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from src.database import init_db
 from src.views import (
     auth_router,
@@ -48,15 +47,6 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
     app.include_router(message_router)
     app.include_router(ws_router)
     app.include_router(firmware_router)
-
-    # Mount static files for debugging UI
-    try:
-        from pathlib import Path
-        static_dir = Path(__file__).parent / "static"
-        if static_dir.exists():
-            app.mount("/debug", StaticFiles(directory=str(static_dir)), name="debug")
-    except Exception:
-        pass  # Static files optional
 
     return app
 
