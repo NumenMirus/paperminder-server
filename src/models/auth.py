@@ -57,6 +57,7 @@ class UserResponse(BaseModel):
     full_name: str | None
     phone: str | None
     is_active: bool
+    is_admin: bool
     created_at: datetime
 
 

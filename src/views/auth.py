@@ -63,11 +63,11 @@ def register(payload: UserRegistrationRequest) -> UserRegistrationResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create user account",
         ) from e
-    
-    # Generate tokens
-    access_token = auth.create_access_token(uid=user.uuid)
-    refresh_token = auth.create_refresh_token(uid=user.uuid)
-    
+
+    # Generate tokens with is_admin claim
+    access_token = auth.create_access_token(uid=user.uuid, payload={"is_admin": user.is_admin})
+    refresh_token = auth.create_refresh_token(uid=user.uuid, payload={"is_admin": user.is_admin})
+
     # Build response
     user_response = UserResponse(
         uuid=UUID(user.uuid),
@@ -76,6 +76,7 @@ def register(payload: UserRegistrationRequest) -> UserRegistrationResponse:
         full_name=user.full_name,
         phone=user.phone,
         is_active=user.is_active,
+        is_admin=user.is_admin,
         created_at=user.created_at,
     )
     
@@ -113,11 +114,11 @@ def login(payload: UserLoginRequest) -> UserLoginResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is not active",
         )
-    
-    # Generate tokens
-    access_token = auth.create_access_token(uid=user.uuid)
-    refresh_token = auth.create_refresh_token(uid=user.uuid)
-    
+
+    # Generate tokens with is_admin claim
+    access_token = auth.create_access_token(uid=user.uuid, payload={"is_admin": user.is_admin})
+    refresh_token = auth.create_refresh_token(uid=user.uuid, payload={"is_admin": user.is_admin})
+
     # Build response
     user_response = UserResponse(
         uuid=UUID(user.uuid),
@@ -126,6 +127,7 @@ def login(payload: UserLoginRequest) -> UserLoginResponse:
         full_name=user.full_name,
         phone=user.phone,
         is_active=user.is_active,
+        is_admin=user.is_admin,
         created_at=user.created_at,
     )
     
@@ -174,5 +176,6 @@ def get_user_info(token: RequestToken = Depends(get_bearer_token)):
         full_name=user.full_name,
         phone=user.phone,
         is_active=user.is_active,
+        is_admin=user.is_admin,
         created_at=user.created_at,
     )
