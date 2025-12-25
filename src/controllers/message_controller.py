@@ -120,6 +120,17 @@ class ConnectionManager:
 
         return True
 
+    def is_printer_connected(self, printer_uuid: str) -> bool:
+        """Check if a printer is currently connected.
+
+        Args:
+            printer_uuid: The printer UUID
+
+        Returns:
+            True if printer has active connections, False otherwise
+        """
+        return len(self._connections.get(printer_uuid, [])) > 0
+
     async def handle_firmware_progress(self, printer_uuid: str, percent: int, status_message: str) -> None:
         """Handle firmware update progress from printer."""
         try:

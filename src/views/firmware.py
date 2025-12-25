@@ -288,7 +288,7 @@ async def create_rollout(
     Admin-only endpoint for managing firmware deployments.
     """
     try:
-        rollout = RolloutService.create_rollout(
+        rollout = await RolloutService.create_rollout(
             firmware_version=payload.firmware_version,
             target_all=payload.target.all,
             target_user_ids=[str(uid) for uid in payload.target.user_ids] if payload.target.user_ids else None,

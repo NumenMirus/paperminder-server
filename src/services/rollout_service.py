@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 
 from src.database import UpdateRollout, Printer
@@ -26,7 +28,7 @@ class RolloutService:
     """Service for managing firmware update rollouts."""
 
     @staticmethod
-    def create_rollout(
+    async def create_rollout(
         firmware_version: str,
         target_all: bool = False,
         target_user_ids: list[str] | None = None,
@@ -89,8 +91,11 @@ class RolloutService:
             scheduled_for=scheduled_for,
         )
 
-        # Calculate and set target printers
-        RolloutService._calculate_rollout_targets(rollout)
+        # Calculate and set target printers, and get the list
+        target_printers = RolloutService._calculate_rollout_targets(rollout)
+
+        # Notify connected printers immediately
+        await RolloutService._notify_connected_printers(rollout, target_printers)
 
         return rollout
 
@@ -157,6 +162,120 @@ class RolloutService:
                 rollout.total_targets = len(unique_printers)
                 rollout.pending_count = len(unique_printers)
                 session.flush()
+
+        return unique_printers
+
+    @staticmethod
+    async def _notify_connected_printers(rollout: UpdateRollout, target_printers: list[Printer]) -> None:
+        """Push firmware updates to currently connected printers.
+
+        Args:
+            rollout: The rollout object
+            target_printers: List of target Printer objects
+        """
+        # Import here to avoid circular dependency
+        from src.controllers.message_controller import connection_manager
+        from src.services.update_service import UpdateService
+        from src.config import get_settings
+
+        # Get firmware version details
+        firmware = FirmwareService.get_firmware_by_id(rollout.firmware_version_id)
+        if not firmware:
+            logging.getLogger(__name__).error(f"Firmware version {rollout.firmware_version_id} not found for rollout {rollout.id}")
+            return
+
+        # Get base URL for firmware downloads
+        settings = get_settings()
+        base_url = getattr(settings, 'base_url', 'http://localhost:8000')
+
+        # Create firmware update message
+        import json
+        update_message = {
+            "kind": "firmware_update",
+            "version": firmware.version,
+            "url": f"{base_url}/api/firmware/download/{firmware.version}",
+            "md5": firmware.md5_checksum
+        }
+
+        logger = logging.getLogger(__name__)
+        notified_count = 0
+        not_connected_count = 0
+
+        # Track printers that were actually notified (to decrement pending_count)
+        notified_printers = []
+
+        # Notify connected printers
+        for printer in target_printers:
+            # Check if printer is connected and has auto_update enabled
+            if connection_manager.is_printer_connected(printer.uuid):
+                if printer.auto_update:
+                    # Check rollout timing
+                    if RolloutService._should_update_now(rollout, printer):
+                        # Send firmware update
+                        sent = await connection_manager.send_firmware_update(printer.uuid, update_message)
+                        if sent:
+                            # Record update start
+                            await asyncio.to_thread(
+                                create_update_record,
+                                printer_id=printer.uuid,
+                                firmware_version=firmware.version,
+                                rollout_id=rollout.id,
+                            )
+                            notified_printers.append(printer.uuid)
+                            notified_count += 1
+                            logger.info(f"Rollout {rollout.id}: Pushed firmware {firmware.version} to connected printer {printer.uuid}")
+                        else:
+                            logger.warning(f"Rollout {rollout.id}: Failed to send update to printer {printer.uuid}")
+                    else:
+                        not_connected_count += 1
+                        logger.debug(f"Rollout {rollout.id}: Printer {printer.uuid} connected but not eligible for update yet (timing/percentage)")
+                else:
+                    not_connected_count += 1
+                    logger.debug(f"Rollout {rollout.id}: Printer {printer.uuid} connected but auto_update disabled")
+            else:
+                not_connected_count += 1
+                logger.debug(f"Rollout {rollout.id}: Printer {printer.uuid} not connected")
+
+        # Update rollout counters - decrement pending_count for notified printers
+        if notified_printers:
+            await asyncio.to_thread(
+                update_rollout_progress,
+                rollout_id=rollout.id,
+                pending_decrement=len(notified_printers),
+            )
+
+        logger.info(f"Rollout {rollout.id}: Notified {notified_count} connected printers, {not_connected_count} offline/disconnected")
+
+    @staticmethod
+    def _should_update_now(rollout: UpdateRollout, printer: Printer) -> bool:
+        """Check if a printer should receive the update now based on rollout configuration.
+
+        Args:
+            rollout: The rollout object
+            printer: The printer object
+
+        Returns:
+            True if printer should update now, False otherwise
+        """
+        from src.services.update_service import UpdateService
+        import hashlib
+
+        # For scheduled rollouts, check if time has arrived
+        if rollout.rollout_type == "scheduled":
+            if not rollout.scheduled_for:
+                return False
+            if rollout.scheduled_for > datetime.now(UTC):
+                return False
+
+        # For gradual rollouts, check if printer is in the current percentage bucket
+        if rollout.rollout_type == "gradual":
+            # Calculate MD5 hash of printer UUID
+            printer_hash = int(hashlib.md5(printer.uuid.encode()).hexdigest(), 16)
+            bucket = printer_hash % 100
+            if bucket >= rollout.rollout_percentage:
+                return False
+
+        return True
 
     @staticmethod
     def get_rollout(rollout_id: int) -> UpdateRollout | None:
