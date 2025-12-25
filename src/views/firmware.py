@@ -39,8 +39,10 @@ from src.crud import (
     get_firmware_version,
     get_firmware_version_by_id,
     compare_versions,
+    get_user,
 )
 from src.database import FirmwareVersion, Printer, UpdateRollout
+from src.dependencies import AdminUser, CurrentUser
 
 router = APIRouter(prefix="/api", tags=["firmware"])
 
@@ -56,6 +58,7 @@ router = APIRouter(prefix="/api", tags=["firmware"])
     response_model=FirmwareVersionResponse,
 )
 async def upload_firmware(
+    _admin: AdminUser,
     file: UploadFile = File(..., description="Firmware binary file"),
     version: str = File(..., description="Semantic version (e.g., 1.0.0)"),
     channel: str = File("stable", description="Update channel (stable, beta, canary)"),
@@ -178,32 +181,37 @@ async def list_firmware(
 
 @router.get("/printers", response_model=PrinterListResponse)
 async def list_printers(
+    _user: CurrentUser,
     user_id: UUID | None = None,
     online: bool | None = None,
     firmware_version: str | None = None,
     channel: str | None = None
 ) -> PrinterListResponse:
-    """List printers with optional filters."""
-    user_uuid = str(user_id) if user_id else None
+    """List printers with optional filters.
 
-    # TODO: Re-enable authentication when ready
-    # # If filtering by user, verify the requesting user owns those printers
-    # if user_uuid:
-    #     requesting_user_uuid = _user["uid"]
-    #     if user_uuid != requesting_user_uuid:
-    #         # User can only view their own printers
-    #         printers = get_user_printers(requesting_user_uuid)
-    #     else:
-    #         printers = get_user_printers(user_uuid)
-    # else:
-    #     printers = get_printers_by_filters(
-    #         user_uuid=user_uuid,
-    #         online=online,
-    #         firmware_version=firmware_version,
-    #         channel=channel,
-    #     )
+    Regular users can only view their own printers.
+    Admin users can view all printers and filter by user_id.
+    """
+    requesting_user_uuid = _user["uid"]
 
-    # Auth disabled for debugging - return all matching printers
+    # Check if requesting user is admin
+    user = get_user(uuid=requesting_user_uuid)
+    is_admin = user.is_admin if user else False
+
+    # If not admin and trying to filter by different user_id, deny access
+    if not is_admin and user_id is not None and str(user_id) != requesting_user_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own printers",
+        )
+
+    # If not admin, force user_id to be their own UUID
+    if not is_admin:
+        user_uuid = requesting_user_uuid
+    else:
+        user_uuid = str(user_id) if user_id else None
+
+    # Get printers
     if user_uuid:
         printers = get_user_printers(user_uuid)
     else:
@@ -222,9 +230,14 @@ async def list_printers(
 
 @router.get("/printers/{printer_id}", response_model=PrinterDetailsResponse)
 async def get_printer_details(
+    _user: CurrentUser,
     printer_id: UUID
 ) -> PrinterDetailsResponse:
-    """Get detailed information about a printer."""
+    """Get detailed information about a printer.
+
+    Regular users can only view their own printers.
+    Admin users can view any printer.
+    """
     printer = get_printer(uuid=str(printer_id))
     if not printer:
         raise HTTPException(
@@ -232,23 +245,31 @@ async def get_printer_details(
             detail="Printer not found",
         )
 
-    # TODO: Verify user owns this printer (auth disabled for debugging)
-    # requesting_user_uuid = _user["uid"]
-    # if printer.user_uuid != requesting_user_uuid:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="You do not have access to this printer",
-    #     )
+    # Verify user owns this printer or is admin
+    requesting_user_uuid = _user["uid"]
+    user = get_user(uuid=requesting_user_uuid)
+    is_admin = user.is_admin if user else False
+
+    if not is_admin and printer.user_uuid != requesting_user_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this printer",
+        )
 
     return _printer_to_response(printer)
 
 
 @router.get("/printers/{printer_id}/updates", response_model=UpdateHistoryListResponse)
 async def get_printer_updates(
+    _user: CurrentUser,
     printer_id: UUID,
     limit: int = 100
 ) -> UpdateHistoryListResponse:
-    """Get update history for a printer."""
+    """Get update history for a printer.
+
+    Regular users can only view updates for their own printers.
+    Admin users can view updates for any printer.
+    """
     printer = get_printer(uuid=str(printer_id))
     if not printer:
         raise HTTPException(
@@ -256,13 +277,16 @@ async def get_printer_updates(
             detail="Printer not found",
         )
 
-    # TODO: Verify user owns this printer (auth disabled for debugging)
-    # requesting_user_uuid = _user["uid"]
-    # if printer.user_uuid != requesting_user_uuid:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="You do not have access to this printer",
-    #     )
+    # Verify user owns this printer or is admin
+    requesting_user_uuid = _user["uid"]
+    user = get_user(uuid=requesting_user_uuid)
+    is_admin = user.is_admin if user else False
+
+    if not is_admin and printer.user_uuid != requesting_user_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this printer",
+        )
 
     history = get_printer_update_history(str(printer_id), limit)
     return UpdateHistoryListResponse(
@@ -281,6 +305,7 @@ async def get_printer_updates(
     response_model=RolloutResponse,
 )
 async def create_rollout(
+    _admin: AdminUser,
     payload: RolloutCreateRequest
 ) -> RolloutResponse:
     """Create a new firmware rollout campaign.
@@ -318,6 +343,7 @@ async def create_rollout(
 
 @router.get("/rollouts", response_model=RolloutListResponse)
 async def list_rollouts(
+    _admin: AdminUser,
     status: str | None = None
 ) -> RolloutListResponse:
     """List all rollouts, optionally filtered by status."""
@@ -329,6 +355,7 @@ async def list_rollouts(
 
 @router.get("/rollouts/{rollout_id}", response_model=RolloutDetailResponse)
 async def get_rollout_details(
+    _admin: AdminUser,
     rollout_id: int
 ) -> RolloutDetailResponse:
     """Get detailed information about a rollout."""
@@ -360,6 +387,7 @@ async def get_rollout_details(
 
 @router.patch("/rollouts/{rollout_id}", response_model=RolloutResponse)
 async def update_rollout(
+    _admin: AdminUser,
     rollout_id: int,
     payload: RolloutUpdateRequest
 ) -> RolloutResponse:
@@ -408,6 +436,7 @@ async def update_rollout(
 
 @router.delete("/rollouts/{rollout_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_rollout(
+    _admin: AdminUser,
     rollout_id: int
 ) -> None:
     """Delete a rollout."""
