@@ -9,6 +9,7 @@ from src.views import (
     printer_router,
     message_router,
     ws_router,
+    firmware_router,
 )
 
 from src.config import auth
@@ -19,7 +20,7 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
     app = FastAPI(
         title="PaperMinder Messaging Service",
         version="0.8.0",
-        description="PaperMinder FastAPI application exposing websocket endpoints for personal messaging.",
+        description="PaperMinder FastAPI application exposing websocket endpoints for personal messaging and firmware updates.",
     )
 
     auth.handle_errors(app)
@@ -45,6 +46,8 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
     app.include_router(printer_router)
     app.include_router(message_router)
     app.include_router(ws_router)
+    app.include_router(firmware_router)
+
     return app
 
 

@@ -11,6 +11,9 @@ from src.database import (
     Printer,
     PrinterGroup,
     MessageCache,
+    FirmwareVersion,
+    UpdateRollout,
+    UpdateHistory,
     session_scope,
     hash_password,
     verify_password,
@@ -900,10 +903,10 @@ def get_and_increment_daily_message_number(printer_uuid: str) -> int:
         printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
         if not printer:
             raise RecipientNotFoundError(f"Printer with UUID {printer_uuid} not found")
-        
+
         today = _utcnow().date()
         last_reset = printer.last_message_number_reset_date.date() if printer.last_message_number_reset_date else None
-        
+
         # Reset counter if last reset was on a different day
         if last_reset != today:
             printer.daily_message_number = 1
@@ -911,7 +914,780 @@ def get_and_increment_daily_message_number(printer_uuid: str) -> int:
         else:
             # Increment counter for the same day
             printer.daily_message_number += 1
-        
+
         session.flush()
         current_number = printer.daily_message_number
         return current_number
+
+
+# ============================================================================
+# PRINTER FIRMWARE TRACKING CRUD OPERATIONS
+# ============================================================================
+
+
+def update_printer_firmware_info(
+    uuid: str,
+    firmware_version: str | None = None,
+    auto_update: bool | None = None,
+    update_channel: str | None = None,
+) -> bool:
+    """Update printer firmware information.
+
+    Args:
+        uuid: The UUID of the printer
+        firmware_version: Optional new firmware version
+        auto_update: Optional new auto_update setting
+        update_channel: Optional new update channel
+
+    Returns:
+        True if the printer was updated, False if not found
+    """
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=uuid).first()
+        if printer is None:
+            return False
+        if firmware_version is not None:
+            printer.firmware_version = firmware_version
+        if auto_update is not None:
+            printer.auto_update = auto_update
+        if update_channel is not None:
+            printer.update_channel = update_channel
+        return True
+
+
+def update_printer_connection_status(
+    uuid: str,
+    online: bool,
+    last_connected: datetime | None = None,
+    last_ip: str | None = None,
+) -> bool:
+    """Update printer connection status.
+
+    Args:
+        uuid: The UUID of the printer
+        online: Whether the printer is currently online
+        last_connected: Optional last connection timestamp
+        last_ip: Optional last IP address
+
+    Returns:
+        True if the printer was updated, False if not found
+    """
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=uuid).first()
+        if printer is None:
+            return False
+        printer.online = online
+        if last_connected is not None:
+            printer.last_connected = last_connected
+        elif online:
+            printer.last_connected = _utcnow()
+        if last_ip is not None:
+            printer.last_ip = last_ip
+        return True
+
+
+def get_printers_by_filters(
+    user_uuid: str | None = None,
+    online: bool | None = None,
+    firmware_version: str | None = None,
+    channel: str | None = None,
+) -> list[Printer]:
+    """Retrieve printers matching the specified filters.
+
+    Args:
+        user_uuid: Optional user UUID to filter by
+        online: Optional online status to filter by
+        firmware_version: Optional firmware version to filter by
+        channel: Optional update channel to filter by
+
+    Returns:
+        List of Printer objects matching the filters
+    """
+    with session_scope() as session:
+        query = session.query(Printer)
+
+        if user_uuid is not None:
+            query = query.filter_by(user_uuid=user_uuid)
+        if online is not None:
+            query = query.filter_by(online=online)
+        if firmware_version is not None:
+            query = query.filter_by(firmware_version=firmware_version)
+        if channel is not None:
+            query = query.filter_by(update_channel=channel)
+
+        return query.all()
+
+
+def get_online_printers() -> list[Printer]:
+    """Retrieve all currently online printers.
+
+    Returns:
+        List of Printer objects with online=True
+    """
+    with session_scope() as session:
+        printers = session.query(Printer).filter_by(online=True).all()
+        return printers
+
+
+# ============================================================================
+# FIRMWARE VERSION CRUD OPERATIONS
+# ============================================================================
+
+
+def create_firmware_version(
+    version: str,
+    channel: str,
+    file_data: bytes,
+    file_size: int,
+    md5_checksum: str,
+    sha256_checksum: str | None = None,
+    release_notes: str | None = None,
+    changelog: str | None = None,
+    mandatory: bool = False,
+    min_upgrade_version: str | None = None,
+) -> FirmwareVersion:
+    """Create a new firmware version.
+
+    Args:
+        version: Semantic version string
+        channel: Update channel (stable, beta, canary)
+        file_data: Firmware binary data
+        file_size: Size of the firmware file
+        md5_checksum: MD5 checksum of the firmware
+        sha256_checksum: Optional SHA256 checksum
+        release_notes: Optional release notes
+        changelog: Optional detailed changelog
+        mandatory: Whether this is a mandatory update
+        min_upgrade_version: Minimum version that can upgrade
+
+    Returns:
+        The created FirmwareVersion object
+    """
+    with session_scope() as session:
+        firmware = FirmwareVersion(
+            version=version,
+            channel=channel,
+            file_data=file_data,
+            file_size=file_size,
+            md5_checksum=md5_checksum,
+            sha256_checksum=sha256_checksum,
+            release_notes=release_notes,
+            changelog=changelog,
+            mandatory=mandatory,
+            min_upgrade_version=min_upgrade_version,
+        )
+        session.add(firmware)
+        session.flush()
+        session.refresh(firmware)
+        return firmware
+
+
+def get_firmware_version(version: str) -> FirmwareVersion | None:
+    """Retrieve a firmware version by version string.
+
+    Args:
+        version: The version string
+
+    Returns:
+        The FirmwareVersion object or None if not found
+    """
+    with session_scope() as session:
+        firmware = session.query(FirmwareVersion).filter_by(version=version).first()
+        return firmware
+
+
+def get_firmware_version_by_id(firmware_id: int) -> FirmwareVersion | None:
+    """Retrieve a firmware version by database ID.
+
+    Args:
+        firmware_id: The database ID
+
+    Returns:
+        The FirmwareVersion object or None if not found
+    """
+    with session_scope() as session:
+        firmware = session.query(FirmwareVersion).filter_by(id=firmware_id).first()
+        return firmware
+
+
+def get_latest_firmware(channel: str = "stable") -> FirmwareVersion | None:
+    """Retrieve the latest firmware version for a channel.
+
+    Args:
+        channel: The update channel (default: stable)
+
+    Returns:
+        The latest FirmwareVersion object or None if not found
+    """
+    with session_scope() as session:
+        firmware = (
+            session.query(FirmwareVersion)
+            .filter_by(channel=channel)
+            .filter(FirmwareVersion.deprecated_at.is_(None))
+            .order_by(FirmwareVersion.released_at.desc())
+            .first()
+        )
+        return firmware
+
+
+def get_all_firmware_versions(channel: str | None = None) -> list[FirmwareVersion]:
+    """Retrieve all firmware versions, optionally filtered by channel.
+
+    Args:
+        channel: Optional channel to filter by
+
+    Returns:
+        List of FirmwareVersion objects
+    """
+    with session_scope() as session:
+        query = session.query(FirmwareVersion)
+        if channel is not None:
+            query = query.filter_by(channel=channel)
+        firmware = query.order_by(FirmwareVersion.released_at.desc()).all()
+        return firmware
+
+
+def update_firmware_statistics(
+    firmware_id: int,
+    download_increment: bool = False,
+    success_increment: bool = False,
+    failure_increment: bool = False,
+) -> bool:
+    """Update firmware download/success/failure statistics.
+
+    Args:
+        firmware_id: The firmware database ID
+        download_increment: Increment download count
+        success_increment: Increment success count
+        failure_increment: Increment failure count
+
+    Returns:
+        True if updated, False if firmware not found
+    """
+    with session_scope() as session:
+        firmware = session.query(FirmwareVersion).filter_by(id=firmware_id).first()
+        if firmware is None:
+            return False
+        if download_increment:
+            firmware.download_count += 1
+        if success_increment:
+            firmware.success_count += 1
+        if failure_increment:
+            firmware.failure_count += 1
+        return True
+
+
+def deprecate_firmware_version(version: str) -> bool:
+    """Mark a firmware version as deprecated.
+
+    Args:
+        version: The version string to deprecate
+
+    Returns:
+        True if deprecated, False if not found
+    """
+    with session_scope() as session:
+        firmware = session.query(FirmwareVersion).filter_by(version=version).first()
+        if firmware is None:
+            return False
+        firmware.deprecated_at = _utcnow()
+        return True
+
+
+# ============================================================================
+# UPDATE ROLLOUT CRUD OPERATIONS
+# ============================================================================
+
+
+def create_rollout(
+    firmware_version_id: int,
+    target_all: bool = False,
+    target_user_ids: list[str] | None = None,
+    target_printer_ids: list[str] | None = None,
+    target_channels: list[str] | None = None,
+    min_version: str | None = None,
+    max_version: str | None = None,
+    rollout_type: str = "immediate",
+    rollout_percentage: int = 100,
+    scheduled_for: datetime | None = None,
+) -> UpdateRollout:
+    """Create a new update rollout.
+
+    Args:
+        firmware_version_id: The firmware version database ID
+        target_all: Whether to target all printers
+        target_user_ids: Optional list of user IDs to target
+        target_printer_ids: Optional list of printer IDs to target
+        target_channels: Optional list of channels to target
+        min_version: Optional minimum firmware version to target
+        max_version: Optional maximum firmware version to target
+        rollout_type: Type of rollout (immediate, gradual, scheduled)
+        rollout_percentage: Percentage for gradual rollout (0-100)
+        scheduled_for: Optional scheduled start time
+
+    Returns:
+        The created UpdateRollout object
+    """
+    import json
+    with session_scope() as session:
+        rollout = UpdateRollout(
+            firmware_version_id=firmware_version_id,
+            target_all=target_all,
+            target_user_ids=json.dumps(target_user_ids) if target_user_ids else None,
+            target_printer_ids=json.dumps(target_printer_ids) if target_printer_ids else None,
+            target_channels=json.dumps(target_channels) if target_channels else None,
+            min_version=min_version,
+            max_version=max_version,
+            rollout_type=rollout_type,
+            rollout_percentage=rollout_percentage,
+            scheduled_for=scheduled_for,
+            status="pending",
+        )
+        session.add(rollout)
+        session.flush()
+        session.refresh(rollout)
+        return rollout
+
+
+def get_rollout(rollout_id: int) -> UpdateRollout | None:
+    """Retrieve a rollout by database ID.
+
+    Args:
+        rollout_id: The rollout database ID
+
+    Returns:
+        The UpdateRollout object or None if not found
+    """
+    with session_scope() as session:
+        rollout = session.query(UpdateRollout).filter_by(id=rollout_id).first()
+        return rollout
+
+
+def get_rollouts_by_status(status: str) -> list[UpdateRollout]:
+    """Retrieve rollouts by status.
+
+    Args:
+        status: The status to filter by
+
+    Returns:
+        List of UpdateRollout objects
+    """
+    with session_scope() as session:
+        rollouts = (
+            session.query(UpdateRollout)
+            .filter_by(status=status)
+            .order_by(UpdateRollout.created_at.desc())
+            .all()
+        )
+        return rollouts
+
+
+def get_all_rollouts() -> list[UpdateRollout]:
+    """Retrieve all rollouts.
+
+    Returns:
+        List of all UpdateRollout objects
+    """
+    with session_scope() as session:
+        rollouts = (
+            session.query(UpdateRollout)
+            .order_by(UpdateRollout.created_at.desc())
+            .all()
+        )
+        return rollouts
+
+
+def update_rollout_status(
+    rollout_id: int,
+    status: str,
+) -> bool:
+    """Update rollout status.
+
+    Args:
+        rollout_id: The rollout database ID
+        status: New status (pending, active, paused, completed, cancelled)
+
+    Returns:
+        True if updated, False if not found
+    """
+    with session_scope() as session:
+        rollout = session.query(UpdateRollout).filter_by(id=rollout_id).first()
+        if rollout is None:
+            return False
+        rollout.status = status
+        return True
+
+
+def update_rollout_percentage(
+    rollout_id: int,
+    rollout_percentage: int,
+) -> bool:
+    """Update rollout percentage for gradual rollouts.
+
+    Args:
+        rollout_id: The rollout database ID
+        rollout_percentage: New percentage (0-100)
+
+    Returns:
+        True if updated, False if not found
+    """
+    with session_scope() as session:
+        rollout = session.query(UpdateRollout).filter_by(id=rollout_id).first()
+        if rollout is None:
+            return False
+        rollout.rollout_percentage = rollout_percentage
+        return True
+
+
+def update_rollout_progress(
+    rollout_id: int,
+    total_increment: int = 0,
+    completed_increment: int = 0,
+    failed_increment: int = 0,
+    declined_increment: int = 0,
+    pending_decrement: int = 0,
+) -> bool:
+    """Update rollout progress counters.
+
+    Args:
+        rollout_id: The rollout database ID
+        total_increment: Increment total targets by this amount
+        completed_increment: Increment completed count
+        failed_increment: Increment failed count
+        declined_increment: Increment declined count
+        pending_decrement: Decrement pending count
+
+    Returns:
+        True if updated, False if not found
+    """
+    with session_scope() as session:
+        rollout = session.query(UpdateRollout).filter_by(id=rollout_id).first()
+        if rollout is None:
+            return False
+        rollout.total_targets += total_increment
+        rollout.completed_count += completed_increment
+        rollout.failed_count += failed_increment
+        rollout.declined_count += declined_increment
+        rollout.pending_count = max(0, rollout.pending_count - pending_decrement)
+        return True
+
+
+def get_active_rollout_for_printer(
+    printer_uuid: str,
+    firmware_version: str,
+) -> UpdateRollout | None:
+    """Retrieve an active rollout for a specific printer and firmware version.
+
+    Args:
+        printer_uuid: The printer UUID
+        firmware_version: The target firmware version
+
+    Returns:
+        The UpdateRollout object or None if not found
+    """
+    import json
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
+        if not printer:
+            return None
+
+        firmware = session.query(FirmwareVersion).filter_by(version=firmware_version).first()
+        if not firmware:
+            return None
+
+        # Find active rollout for this firmware version
+        rollout = (
+            session.query(UpdateRollout)
+            .filter_by(firmware_version_id=firmware.id, status="active")
+            .first()
+        )
+
+        if not rollout:
+            return None
+
+        # Parse JSON fields
+        target_user_ids = json.loads(rollout.target_user_ids) if rollout.target_user_ids else None
+        target_printer_ids = json.loads(rollout.target_printer_ids) if rollout.target_printer_ids else None
+        target_channels = json.loads(rollout.target_channels) if rollout.target_channels else None
+
+        # Check if printer matches rollout criteria
+        if rollout.target_all:
+            return rollout
+
+        if target_user_ids and printer.user_uuid in target_user_ids:
+            return rollout
+
+        if target_printer_ids and printer_uuid in target_printer_ids:
+            return rollout
+
+        if target_channels and printer.update_channel in target_channels:
+            # Check version constraints
+            if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
+                return None
+            if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
+                return None
+            return rollout
+
+        return None
+
+
+def delete_rollout(rollout_id: int) -> bool:
+    """Delete a rollout.
+
+    Args:
+        rollout_id: The rollout database ID
+
+    Returns:
+        True if deleted, False if not found
+    """
+    with session_scope() as session:
+        rollout = session.query(UpdateRollout).filter_by(id=rollout_id).first()
+        if rollout is None:
+            return False
+        session.delete(rollout)
+        return True
+
+
+# ============================================================================
+# UPDATE HISTORY CRUD OPERATIONS
+# ============================================================================
+
+
+def create_update_record(
+    printer_id: str,
+    firmware_version: str,
+    rollout_id: int | None = None,
+) -> UpdateHistory:
+    """Create an update history record.
+
+    Args:
+        printer_id: The printer UUID
+        firmware_version: The target firmware version
+        rollout_id: Optional rollout database ID
+
+    Returns:
+        The created UpdateHistory object
+    """
+    with session_scope() as session:
+        history = UpdateHistory(
+            printer_id=printer_id,
+            firmware_version=firmware_version,
+            rollout_id=rollout_id,
+            status="pending",
+        )
+        session.add(history)
+        session.flush()
+        session.refresh(history)
+        return history
+
+
+def update_update_progress(
+    printer_id: str,
+    percent: int,
+    status_message: str,
+) -> bool:
+    """Update progress for an active update.
+
+    Args:
+        printer_id: The printer UUID
+        percent: Progress percentage (0-100, or -1 for error)
+        status_message: Human-readable status message
+
+    Returns:
+        True if updated, False if no active update found
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(printer_id=printer_id)
+            .filter(UpdateHistory.status.in_(["pending", "downloading"]))
+            .order_by(UpdateHistory.started_at.desc())
+            .first()
+        )
+        if history is None:
+            return False
+        history.last_percent = percent
+        history.last_status_message = status_message
+        if percent > 0 and percent < 100:
+            history.status = "downloading"
+        return True
+
+
+def mark_update_complete(
+    printer_id: str,
+    version: str,
+) -> bool:
+    """Mark an update as successfully completed.
+
+    Args:
+        printer_id: The printer UUID
+        version: The firmware version that was installed
+
+    Returns:
+        True if updated, False if no active update found
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(printer_id=printer_id, firmware_version=version)
+            .filter(UpdateHistory.status.in_(["pending", "downloading"]))
+            .order_by(UpdateHistory.started_at.desc())
+            .first()
+        )
+        if history is None:
+            return False
+        history.status = "completed"
+        history.completed_at = _utcnow()
+        history.last_percent = 100
+        return True
+
+
+def mark_update_failed(
+    printer_id: str,
+    error_message: str,
+) -> bool:
+    """Mark an update as failed.
+
+    Args:
+        printer_id: The printer UUID
+        error_message: Error message describing the failure
+
+    Returns:
+        True if updated, False if no active update found
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(printer_id=printer_id)
+            .filter(UpdateHistory.status.in_(["pending", "downloading"]))
+            .order_by(UpdateHistory.started_at.desc())
+            .first()
+        )
+        if history is None:
+            return False
+        history.status = "failed"
+        history.completed_at = _utcnow()
+        history.error_message = error_message
+        return True
+
+
+def mark_update_declined(
+    printer_id: str,
+    version: str,
+) -> bool:
+    """Mark an update as declined by printer.
+
+    Args:
+        printer_id: The printer UUID
+        version: The firmware version that was declined
+
+    Returns:
+        True if updated, False if no active update found
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(printer_id=printer_id, firmware_version=version)
+            .filter_by(status="pending")
+            .order_by(UpdateHistory.started_at.desc())
+            .first()
+        )
+        if history is None:
+            # Create a new declined record
+            history = UpdateHistory(
+                printer_id=printer_id,
+                firmware_version=version,
+                status="declined",
+            )
+            session.add(history)
+            session.flush()
+            return True
+        history.status = "declined"
+        history.completed_at = _utcnow()
+        return True
+
+
+def get_printer_update_history(
+    printer_id: str,
+    limit: int = 100,
+) -> list[UpdateHistory]:
+    """Retrieve update history for a printer.
+
+    Args:
+        printer_id: The printer UUID
+        limit: Maximum number of records to retrieve
+
+    Returns:
+        List of UpdateHistory objects ordered by start time (newest first)
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(printer_id=printer_id)
+            .order_by(UpdateHistory.started_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return history
+
+
+def get_rollout_update_history(
+    rollout_id: int,
+) -> list[UpdateHistory]:
+    """Retrieve update history for a rollout.
+
+    Args:
+        rollout_id: The rollout database ID
+
+    Returns:
+        List of UpdateHistory objects
+    """
+    with session_scope() as session:
+        history = (
+            session.query(UpdateHistory)
+            .filter_by(rollout_id=rollout_id)
+            .order_by(UpdateHistory.started_at.desc())
+            .all()
+        )
+        return history
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+
+def compare_versions(version1: str, version2: str) -> int:
+    """Compare two semantic version strings.
+
+    Args:
+        version1: First version string
+        version2: Second version string
+
+    Returns:
+        -1 if version1 < version2
+         0 if version1 == version2
+         1 if version1 > version2
+    """
+    v1_parts = [int(x) for x in version1.split(".")]
+    v2_parts = [int(x) for x in version2.split(".")]
+
+    # Pad with zeros if needed
+    max_len = max(len(v1_parts), len(v2_parts))
+    v1_parts.extend([0] * (max_len - len(v1_parts)))
+    v2_parts.extend([0] * (max_len - len(v2_parts)))
+
+    for v1, v2 in zip(v1_parts, v2_parts):
+        if v1 < v2:
+            return -1
+        elif v1 > v2:
+            return 1
+
+    return 0
+
+
+def datetime_import():
+    """Lazy import datetime for use in CRUD functions."""
+    from datetime import datetime
+    return datetime
+

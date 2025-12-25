@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Generator
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, Text, Boolean, create_engine, ForeignKey
+from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker, relationship
 from passlib.context import CryptContext
@@ -167,10 +167,20 @@ class Printer(Base):
     location: Mapped[str] = mapped_column(String(256), nullable=False)
     user_uuid: Mapped[str] = mapped_column(String(36), ForeignKey("users.uuid"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    
+
     # Daily message number tracking
     daily_message_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_message_number_reset_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Firmware tracking
+    firmware_version: Mapped[str] = mapped_column(String(16), default="0.0.0", nullable=False)
+    auto_update: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    update_channel: Mapped[str] = mapped_column(String(16), default="stable", nullable=False)
+
+    # Connection tracking
+    last_connected: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     owner: Mapped[User] = relationship("User", foreign_keys=[user_uuid], backref="owned_printers")
@@ -189,6 +199,101 @@ class MessageCache(Base):
     message_body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     is_delivered: Mapped[bool] = mapped_column(default=False, index=True)
+
+
+class FirmwareVersion(Base):
+    """ORM model representing a firmware version."""
+
+    __tablename__ = "firmware_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # stable, beta, canary
+
+    # File info
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)  # BLOB storage
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    md5_checksum: Mapped[str] = mapped_column(String(32), nullable=False)
+    sha256_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Release info
+    release_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changelog: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mandatory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    min_upgrade_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # Availability
+    released_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Statistics
+    download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class UpdateRollout(Base):
+    """ORM model representing a firmware update rollout campaign."""
+
+    __tablename__ = "update_rollouts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    firmware_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("firmware_versions.id"), nullable=False, index=True)
+
+    # Targeting (stored as JSON strings for SQLite compatibility)
+    target_all: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    target_user_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of user IDs
+    target_printer_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of printer IDs
+    target_channels: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of channels
+    min_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    max_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # Rollout strategy
+    rollout_type: Mapped[str] = mapped_column(String(32), nullable=False)  # immediate, gradual, scheduled
+    rollout_percentage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # For gradual rollouts (0-100)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Status
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)  # pending, active, paused, completed, cancelled
+
+    # Progress tracking
+    total_targets: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    declined_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    # Relationships
+    firmware_version: Mapped[FirmwareVersion] = relationship("FirmwareVersion", foreign_keys=[firmware_version_id])
+
+
+class UpdateHistory(Base):
+    """ORM model tracking individual firmware update attempts."""
+
+    __tablename__ = "update_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rollout_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("update_rollouts.id"), nullable=True, index=True)
+    printer_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    firmware_version: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    # Status tracking
+    status: Mapped[str] = mapped_column(String(32), nullable=False)  # pending, downloading, completed, failed, declined
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timing
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Progress
+    last_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_status_message: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    # Relationships
+    rollout: Mapped[UpdateRollout] = relationship("UpdateRollout", foreign_keys=[rollout_id])
 
 
 _engine: Engine | None = None
