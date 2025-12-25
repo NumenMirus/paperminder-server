@@ -16,6 +16,7 @@ from src.crud import (
     verify_user_password,
     get_user,
 )
+from src.dependencies import get_bearer_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -136,21 +137,19 @@ def login(payload: UserLoginRequest) -> UserLoginResponse:
 
 
 @router.get("/me", status_code=status.HTTP_200_OK)
-def get_user_info(token: RequestToken = Depends(auth.get_token_from_request)):
+def get_user_info(token: RequestToken = Depends(get_bearer_token)):
     """Get information about the currently authenticated user.
-    
+
     Requires authentication via JWT token in Authorization header.
-    
+
     Returns:
         UserResponse with user data
-        
+
     Raises:
         HTTPException 401: If token is invalid or expired
         HTTPException 404: If user not found
     """
     try:
-        # Verify token validity
-        auth.verify_token(token=token)
         # Extract user UUID from token payload
         # RequestToken is a dict-like object with user info
         user_uuid = token["uid"] if isinstance(token, dict) else str(token)

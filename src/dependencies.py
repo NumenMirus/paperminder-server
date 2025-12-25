@@ -2,20 +2,69 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from authx import RequestToken
 
 from src.config import auth
 from src.crud import get_user
 
 
+async def get_bearer_token(
+    authorization: Annotated[str, Header()]
+) -> RequestToken:
+    """Extract and verify JWT token from Authorization header.
+
+    This dependency extracts the bearer token from the Authorization header
+    and verifies it without exposing AuthX's internal configuration parameters.
+
+    Args:
+        authorization: The raw Authorization header value (e.g., "Bearer <token>")
+
+    Returns:
+        The verified token payload as RequestToken
+
+    Raises:
+        HTTPException 401: If token is missing, malformed, or invalid
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header",
+        )
+
+    # Extract token from "Bearer <token>" format
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication scheme. Use 'Bearer <token>'",
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization header format. Use 'Bearer <token>'",
+        )
+
+    # Decode and verify token
+    try:
+        payload = auth._decode_token(token)
+        auth.verify_token(payload)
+        return payload
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        ) from e
+
+
 async def get_current_user(
-    token: RequestToken = Depends(auth.get_token_from_request),
+    token: RequestToken = Depends(get_bearer_token),
 ) -> RequestToken:
     """Dependency to get the current authenticated user.
 
     Args:
-        token: JWT token from request
+        token: JWT token from Authorization header
 
     Returns:
         The verified token payload
@@ -23,17 +72,16 @@ async def get_current_user(
     Raises:
         HTTPException 401: If token is invalid
     """
-    auth.verify_token(token=token)
     return token
 
 
 async def get_current_admin_user(
-    token: Annotated[RequestToken, Depends(auth.get_token_from_request)],
+    token: RequestToken = Depends(get_bearer_token),
 ) -> RequestToken:
     """Dependency to verify the current user is an admin.
 
     Args:
-        token: JWT token from request
+        token: JWT token from Authorization header
 
     Returns:
         The verified token payload
@@ -42,7 +90,6 @@ async def get_current_admin_user(
         HTTPException 401: If token is invalid
         HTTPException 403: If user is not an admin
     """
-    auth.verify_token(token=token)
     user_uuid = token["uid"]
 
     # Get user from database

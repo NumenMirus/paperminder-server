@@ -972,19 +972,18 @@ def update_printer_connection_status(
     Returns:
         True if the printer was updated, False if not found
     """
-    with datetime_import():
-        with session_scope() as session:
-            printer = session.query(Printer).filter_by(uuid=uuid).first()
-            if printer is None:
-                return False
-            printer.online = online
-            if last_connected is not None:
-                printer.last_connected = last_connected
-            elif online:
-                printer.last_connected = _utcnow()
-            if last_ip is not None:
-                printer.last_ip = last_ip
-            return True
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=uuid).first()
+        if printer is None:
+            return False
+        printer.online = online
+        if last_connected is not None:
+            printer.last_connected = last_connected
+        elif online:
+            printer.last_connected = _utcnow()
+        if last_ip is not None:
+            printer.last_ip = last_ip
+        return True
 
 
 def get_printers_by_filters(
@@ -1230,25 +1229,24 @@ def create_rollout(
         The created UpdateRollout object
     """
     import json
-    with datetime_import():
-        with session_scope() as session:
-            rollout = UpdateRollout(
-                firmware_version_id=firmware_version_id,
-                target_all=target_all,
-                target_user_ids=json.dumps(target_user_ids) if target_user_ids else None,
-                target_printer_ids=json.dumps(target_printer_ids) if target_printer_ids else None,
-                target_channels=json.dumps(target_channels) if target_channels else None,
-                min_version=min_version,
-                max_version=max_version,
-                rollout_type=rollout_type,
-                rollout_percentage=rollout_percentage,
-                scheduled_for=scheduled_for,
-                status="pending",
-            )
-            session.add(rollout)
-            session.flush()
-            session.refresh(rollout)
-            return rollout
+    with session_scope() as session:
+        rollout = UpdateRollout(
+            firmware_version_id=firmware_version_id,
+            target_all=target_all,
+            target_user_ids=json.dumps(target_user_ids) if target_user_ids else None,
+            target_printer_ids=json.dumps(target_printer_ids) if target_printer_ids else None,
+            target_channels=json.dumps(target_channels) if target_channels else None,
+            min_version=min_version,
+            max_version=max_version,
+            rollout_type=rollout_type,
+            rollout_percentage=rollout_percentage,
+            scheduled_for=scheduled_for,
+            status="pending",
+        )
+        session.add(rollout)
+        session.flush()
+        session.refresh(rollout)
+        return rollout
 
 
 def get_rollout(rollout_id: int) -> UpdateRollout | None:
@@ -1388,50 +1386,49 @@ def get_active_rollout_for_printer(
         The UpdateRollout object or None if not found
     """
     import json
-    with datetime_import():
-        with session_scope() as session:
-            printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
-            if not printer:
-                return None
-
-            firmware = session.query(FirmwareVersion).filter_by(version=firmware_version).first()
-            if not firmware:
-                return None
-
-            # Find active rollout for this firmware version
-            rollout = (
-                session.query(UpdateRollout)
-                .filter_by(firmware_version_id=firmware.id, status="active")
-                .first()
-            )
-
-            if not rollout:
-                return None
-
-            # Parse JSON fields
-            target_user_ids = json.loads(rollout.target_user_ids) if rollout.target_user_ids else None
-            target_printer_ids = json.loads(rollout.target_printer_ids) if rollout.target_printer_ids else None
-            target_channels = json.loads(rollout.target_channels) if rollout.target_channels else None
-
-            # Check if printer matches rollout criteria
-            if rollout.target_all:
-                return rollout
-
-            if target_user_ids and printer.user_uuid in target_user_ids:
-                return rollout
-
-            if target_printer_ids and printer_uuid in target_printer_ids:
-                return rollout
-
-            if target_channels and printer.update_channel in target_channels:
-                # Check version constraints
-                if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
-                    return None
-                if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
-                    return None
-                return rollout
-
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=printer_uuid).first()
+        if not printer:
             return None
+
+        firmware = session.query(FirmwareVersion).filter_by(version=firmware_version).first()
+        if not firmware:
+            return None
+
+        # Find active rollout for this firmware version
+        rollout = (
+            session.query(UpdateRollout)
+            .filter_by(firmware_version_id=firmware.id, status="active")
+            .first()
+        )
+
+        if not rollout:
+            return None
+
+        # Parse JSON fields
+        target_user_ids = json.loads(rollout.target_user_ids) if rollout.target_user_ids else None
+        target_printer_ids = json.loads(rollout.target_printer_ids) if rollout.target_printer_ids else None
+        target_channels = json.loads(rollout.target_channels) if rollout.target_channels else None
+
+        # Check if printer matches rollout criteria
+        if rollout.target_all:
+            return rollout
+
+        if target_user_ids and printer.user_uuid in target_user_ids:
+            return rollout
+
+        if target_printer_ids and printer_uuid in target_printer_ids:
+            return rollout
+
+        if target_channels and printer.update_channel in target_channels:
+            # Check version constraints
+            if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
+                return None
+            if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
+                return None
+            return rollout
+
+        return None
 
 
 def delete_rollout(rollout_id: int) -> bool:
