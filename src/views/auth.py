@@ -153,8 +153,13 @@ def get_user_info(token: RequestToken = Depends(get_bearer_token)):
     """
     try:
         # Extract user UUID from token payload
-        # RequestToken is a dict-like object with user info
-        user_uuid = token["uid"] if isinstance(token, dict) else str(token)
+        # TokenPayload is a Pydantic model with .sub attribute (JWT subject claim)
+        user_uuid = token.sub
+    except AttributeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload: missing uid",
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
