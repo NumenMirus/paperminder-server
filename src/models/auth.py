@@ -24,8 +24,8 @@ class UserRegistrationRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=4,
-        max_length=8,
-        description="Password (minimum 4 characters)",
+        max_length=16,
+        description="Password (minimum 16 characters)",
     )
     full_name: str | None = Field(None, max_length=256, description="Full name (optional)")
     phone: str | None = Field(None, max_length=20, description="Phone number (optional)")
