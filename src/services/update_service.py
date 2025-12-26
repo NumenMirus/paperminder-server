@@ -42,8 +42,8 @@ class UpdateService:
         if not printer.auto_update:
             return None
 
-        # Get latest firmware for printer's channel
-        latest = FirmwareService.get_latest_firmware(printer.update_channel)
+        # Get latest firmware for printer's channel and platform
+        latest = FirmwareService.get_latest_firmware(printer.update_channel, printer.platform)
         if not latest:
             return None
 
@@ -112,11 +112,12 @@ class UpdateService:
         Returns:
             Dictionary containing the firmware update message
         """
-        download_url = FirmwareService.generate_download_url(firmware.version, base_url)
+        download_url = FirmwareService.generate_download_url(firmware.version, firmware.platform, base_url)
 
         return {
             "kind": "firmware_update",
             "version": firmware.version,
+            "platform": firmware.platform,
             "url": download_url,
             "md5": firmware.md5_checksum,
         }
@@ -250,6 +251,7 @@ class UpdateService:
     def update_printer_subscription_info(
         printer_uuid: str,
         firmware_version: str | None = None,
+        platform: str | None = None,
         auto_update: bool | None = None,
         update_channel: str | None = None,
         online: bool = True,
@@ -260,6 +262,7 @@ class UpdateService:
         Args:
             printer_uuid: The printer UUID
             firmware_version: Optional firmware version
+            platform: Optional platform
             auto_update: Optional auto-update setting
             update_channel: Optional update channel
             online: Whether printer is online
@@ -272,6 +275,7 @@ class UpdateService:
         success = update_printer_firmware_info(
             uuid=printer_uuid,
             firmware_version=firmware_version,
+            platform=platform,
             auto_update=auto_update,
             update_channel=update_channel,
         )

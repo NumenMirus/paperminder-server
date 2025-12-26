@@ -37,3 +37,32 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+# ============================================================================
+# Platform Configuration
+# ============================================================================
+
+# Supported firmware platforms
+SUPPORTED_PLATFORMS = [
+    "esp8266",  # Original ESP8266 series
+    "esp32",    # Original ESP32 dual-core
+    "esp32s2",  # ESP32-S2 single-core with USB-OTG
+    "esp32s3",  # ESP32-S3 dual-core with AI acceleration
+    "esp32c3",  # ESP32-C3 low-cost RISC-V
+]
+
+# Default platform for backward compatibility
+DEFAULT_PLATFORM = "esp8266"
+
+
+def is_platform_supported(platform: str) -> bool:
+    """Check if a platform is supported.
+
+    Args:
+        platform: Platform string to validate
+
+    Returns:
+        True if platform is supported, False otherwise
+    """
+    return platform in SUPPORTED_PLATFORMS

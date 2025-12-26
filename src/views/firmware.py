@@ -61,6 +61,7 @@ async def upload_firmware(
     _admin: AdminUser,
     file: UploadFile = File(..., description="Firmware binary file"),
     version: str = File(..., description="Semantic version (e.g., 1.0.0)"),
+    platform: str = File(..., description="Target platform (e.g., esp8266, esp32)"),
     channel: str = File("stable", description="Update channel (stable, beta, canary)"),
     release_notes: str | None = File(None, description="Release notes"),
     changelog: str | None = File(None, description="Detailed changelog"),
@@ -86,6 +87,7 @@ async def upload_firmware(
     try:
         firmware = FirmwareService.upload_firmware(
             version=version,
+            platform=platform,
             channel=channel,
             file_data=file_data,
             release_notes=release_notes,
@@ -111,44 +113,47 @@ async def upload_firmware(
 
 @router.get("/firmware/latest", response_model=FirmwareVersionResponse)
 async def get_latest_firmware(
-    channel: str = "stable"
+    channel: str = "stable",
+    platform: str = "esp8266"
 ) -> FirmwareVersionResponse:
-    """Get the latest firmware version for a channel."""
-    firmware = FirmwareService.get_latest_firmware(channel)
+    """Get the latest firmware version for a channel and platform."""
+    firmware = FirmwareService.get_latest_firmware(channel, platform)
     if not firmware:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No firmware found for channel: {channel}",
+            detail=f"No firmware found for channel: {channel} and platform: {platform}",
         )
 
     return _firmware_to_response(firmware)
 
 
-@router.get("/firmware/{version}", response_model=FirmwareVersionResponse)
+@router.get("/firmware/{platform}/{version}", response_model=FirmwareVersionResponse)
 async def get_firmware_by_version(
+    platform: str,
     version: str
 ) -> FirmwareVersionResponse:
-    """Get firmware details by version."""
-    firmware = FirmwareService.get_firmware(version)
+    """Get firmware details by platform and version."""
+    firmware = FirmwareService.get_firmware(version, platform)
     if not firmware:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Firmware version {version} not found",
+            detail=f"Firmware version {version} for platform {platform} not found",
         )
 
     return _firmware_to_response(firmware)
 
 
-@router.get("/firmware/download/{version}")
+@router.get("/firmware/download/{platform}/{version}")
 async def download_firmware(
+    platform: str,
     version: str
 ) -> Response:
-    """Download firmware binary by version."""
-    firmware = FirmwareService.get_firmware(version)
+    """Download firmware binary by platform and version."""
+    firmware = FirmwareService.get_firmware(version, platform)
     if not firmware:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Firmware version {version} not found",
+            detail=f"Firmware version {version} for platform {platform} not found",
         )
 
     # Record download for statistics
@@ -159,7 +164,7 @@ async def download_firmware(
         content=firmware.file_data,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="paperminder-{version}.bin"',
+            "Content-Disposition": f'attachment; filename="paperminder-{platform}-{version}.bin"',
             "Content-MD5": firmware.md5_checksum,
         },
     )
@@ -167,10 +172,11 @@ async def download_firmware(
 
 @router.get("/firmware", response_model=list[FirmwareVersionResponse])
 async def list_firmware(
-    channel: str | None = None
+    channel: str | None = None,
+    platform: str | None = None
 ) -> list[FirmwareVersionResponse]:
-    """List all firmware versions, optionally filtered by channel."""
-    firmware_list = FirmwareService.list_firmware(channel)
+    """List all firmware versions, optionally filtered by channel and/or platform."""
+    firmware_list = FirmwareService.list_firmware(channel, platform)
     return [_firmware_to_response(fw) for fw in firmware_list]
 
 
@@ -192,7 +198,7 @@ async def list_printers(
     Regular users can only view their own printers.
     Admin users can view all printers and filter by user_id.
     """
-    requesting_user_uuid = _user["uid"]
+    requesting_user_uuid = str(_user.sub)
 
     # Check if requesting user is admin
     user = get_user(uuid=requesting_user_uuid)
@@ -246,7 +252,7 @@ async def get_printer_details(
         )
 
     # Verify user owns this printer or is admin
-    requesting_user_uuid = _user["uid"]
+    requesting_user_uuid = str(_user.sub)
     user = get_user(uuid=requesting_user_uuid)
     is_admin = user.is_admin if user else False
 
@@ -278,7 +284,7 @@ async def get_printer_updates(
         )
 
     # Verify user owns this printer or is admin
-    requesting_user_uuid = _user["uid"]
+    requesting_user_uuid = str(_user.sub)
     user = get_user(uuid=requesting_user_uuid)
     is_admin = user.is_admin if user else False
 
@@ -458,6 +464,7 @@ def _firmware_to_response(firmware: FirmwareVersion) -> FirmwareVersionResponse:
     return FirmwareVersionResponse(
         id=firmware.id,
         version=firmware.version,
+        platform=firmware.platform,
         channel=firmware.channel,
         file_size=firmware.file_size,
         md5_checksum=firmware.md5_checksum,
@@ -483,6 +490,7 @@ def _printer_to_response(printer: Printer) -> PrinterDetailsResponse:
         location=printer.location,
         user_uuid=UUID(printer.user_uuid),
         created_at=printer.created_at,
+        platform=printer.platform,
         firmware_version=printer.firmware_version,
         auto_update=printer.auto_update,
         update_channel=printer.update_channel,

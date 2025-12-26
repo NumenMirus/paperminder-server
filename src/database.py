@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Generator
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey
+from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker, relationship
 from passlib.context import CryptContext
@@ -173,6 +173,7 @@ class Printer(Base):
     last_message_number_reset_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Firmware tracking
+    platform: Mapped[str] = mapped_column(String(32), default="esp8266", nullable=False, index=True)
     firmware_version: Mapped[str] = mapped_column(String(16), default="0.0.0", nullable=False)
     auto_update: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     update_channel: Mapped[str] = mapped_column(String(16), default="stable", nullable=False)
@@ -205,9 +206,13 @@ class FirmwareVersion(Base):
     """ORM model representing a firmware version."""
 
     __tablename__ = "firmware_versions"
+    __table_args__ = (
+        UniqueConstraint('version', 'platform', name='uix_version_platform'),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    version: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+    version: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     channel: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # stable, beta, canary
 
     # File info

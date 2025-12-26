@@ -928,6 +928,7 @@ def get_and_increment_daily_message_number(printer_uuid: str) -> int:
 def update_printer_firmware_info(
     uuid: str,
     firmware_version: str | None = None,
+    platform: str | None = None,
     auto_update: bool | None = None,
     update_channel: str | None = None,
 ) -> bool:
@@ -936,6 +937,7 @@ def update_printer_firmware_info(
     Args:
         uuid: The UUID of the printer
         firmware_version: Optional new firmware version
+        platform: Optional new platform
         auto_update: Optional new auto_update setting
         update_channel: Optional new update channel
 
@@ -948,6 +950,8 @@ def update_printer_firmware_info(
             return False
         if firmware_version is not None:
             printer.firmware_version = firmware_version
+        if platform is not None:
+            printer.platform = platform
         if auto_update is not None:
             printer.auto_update = auto_update
         if update_channel is not None:
@@ -991,6 +995,7 @@ def get_printers_by_filters(
     online: bool | None = None,
     firmware_version: str | None = None,
     channel: str | None = None,
+    platform: str | None = None,
 ) -> list[Printer]:
     """Retrieve printers matching the specified filters.
 
@@ -999,6 +1004,7 @@ def get_printers_by_filters(
         online: Optional online status to filter by
         firmware_version: Optional firmware version to filter by
         channel: Optional update channel to filter by
+        platform: Optional platform to filter by
 
     Returns:
         List of Printer objects matching the filters
@@ -1014,6 +1020,8 @@ def get_printers_by_filters(
             query = query.filter_by(firmware_version=firmware_version)
         if channel is not None:
             query = query.filter_by(update_channel=channel)
+        if platform is not None:
+            query = query.filter_by(platform=platform)
 
         return query.all()
 
@@ -1036,6 +1044,7 @@ def get_online_printers() -> list[Printer]:
 
 def create_firmware_version(
     version: str,
+    platform: str,
     channel: str,
     file_data: bytes,
     file_size: int,
@@ -1050,6 +1059,7 @@ def create_firmware_version(
 
     Args:
         version: Semantic version string
+        platform: Target platform (e.g., esp8266, esp32)
         channel: Update channel (stable, beta, canary)
         file_data: Firmware binary data
         file_size: Size of the firmware file
@@ -1066,6 +1076,7 @@ def create_firmware_version(
     with session_scope() as session:
         firmware = FirmwareVersion(
             version=version,
+            platform=platform,
             channel=channel,
             file_data=file_data,
             file_size=file_size,
@@ -1082,17 +1093,18 @@ def create_firmware_version(
         return firmware
 
 
-def get_firmware_version(version: str) -> FirmwareVersion | None:
-    """Retrieve a firmware version by version string.
+def get_firmware_version(version: str, platform: str) -> FirmwareVersion | None:
+    """Retrieve a firmware version by version string and platform.
 
     Args:
         version: The version string
+        platform: The platform string
 
     Returns:
         The FirmwareVersion object or None if not found
     """
     with session_scope() as session:
-        firmware = session.query(FirmwareVersion).filter_by(version=version).first()
+        firmware = session.query(FirmwareVersion).filter_by(version=version, platform=platform).first()
         return firmware
 
 
@@ -1110,11 +1122,12 @@ def get_firmware_version_by_id(firmware_id: int) -> FirmwareVersion | None:
         return firmware
 
 
-def get_latest_firmware(channel: str = "stable") -> FirmwareVersion | None:
-    """Retrieve the latest firmware version for a channel.
+def get_latest_firmware(channel: str = "stable", platform: str = "esp8266") -> FirmwareVersion | None:
+    """Retrieve the latest firmware version for a channel and platform.
 
     Args:
         channel: The update channel (default: stable)
+        platform: The platform (default: esp8266)
 
     Returns:
         The latest FirmwareVersion object or None if not found
@@ -1122,7 +1135,7 @@ def get_latest_firmware(channel: str = "stable") -> FirmwareVersion | None:
     with session_scope() as session:
         firmware = (
             session.query(FirmwareVersion)
-            .filter_by(channel=channel)
+            .filter_by(channel=channel, platform=platform)
             .filter(FirmwareVersion.deprecated_at.is_(None))
             .order_by(FirmwareVersion.released_at.desc())
             .first()
@@ -1130,11 +1143,12 @@ def get_latest_firmware(channel: str = "stable") -> FirmwareVersion | None:
         return firmware
 
 
-def get_all_firmware_versions(channel: str | None = None) -> list[FirmwareVersion]:
-    """Retrieve all firmware versions, optionally filtered by channel.
+def get_all_firmware_versions(channel: str | None = None, platform: str | None = None) -> list[FirmwareVersion]:
+    """Retrieve all firmware versions, optionally filtered by channel and/or platform.
 
     Args:
         channel: Optional channel to filter by
+        platform: Optional platform to filter by
 
     Returns:
         List of FirmwareVersion objects
@@ -1143,6 +1157,8 @@ def get_all_firmware_versions(channel: str | None = None) -> list[FirmwareVersio
         query = session.query(FirmwareVersion)
         if channel is not None:
             query = query.filter_by(channel=channel)
+        if platform is not None:
+            query = query.filter_by(platform=platform)
         firmware = query.order_by(FirmwareVersion.released_at.desc()).all()
         return firmware
 

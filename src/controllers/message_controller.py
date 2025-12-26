@@ -52,6 +52,7 @@ class ConnectionManager:
             UpdateService.update_printer_subscription_info,
             printer_uuid=str(subscription.api_key),  # api_key is used as printer UUID
             firmware_version=subscription.firmware_version,
+            platform=subscription.platform,
             auto_update=subscription.auto_update,
             update_channel=subscription.update_channel,
             online=True,

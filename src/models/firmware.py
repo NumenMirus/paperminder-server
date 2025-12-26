@@ -19,6 +19,7 @@ class FirmwareUploadRequest(BaseModel):
     """Request model for uploading a new firmware version."""
 
     version: str = Field(..., min_length=1, max_length=16, description="Semantic version (e.g., 1.0.0)")
+    platform: str = Field(..., min_length=1, max_length=32, description="Target platform (e.g., esp8266, esp32)")
     channel: Literal["stable", "beta", "canary"] = Field("stable", description="Update channel")
     release_notes: str | None = Field(None, description="Release notes for this version")
     changelog: str | None = Field(None, description="Detailed changelog")
@@ -31,6 +32,7 @@ class FirmwareVersionResponse(BaseModel):
 
     id: int
     version: str
+    platform: str
     channel: str
     file_size: int
     md5_checksum: str
@@ -70,6 +72,7 @@ class PrinterDetailsResponse(BaseModel):
     created_at: datetime
 
     # Firmware tracking
+    platform: str
     firmware_version: str
     auto_update: bool
     update_channel: str
@@ -97,6 +100,7 @@ class RolloutTargetSpec(BaseModel):
     all: bool = Field(False, description="Target all printers")
     user_ids: list[UUID] | None = Field(None, description="Specific user IDs to target")
     printer_ids: list[UUID] | None = Field(None, description="Specific printer IDs to target")
+    platforms: list[str] | None = Field(None, description="Platforms to target (e.g., ['esp8266', 'esp32'])")
     channels: list[str] | None = Field(None, description="Update channels to target")
     min_version: str | None = Field(None, max_length=16, description="Minimum firmware version to target")
     max_version: str | None = Field(None, max_length=16, description="Maximum firmware version to target")
@@ -161,6 +165,7 @@ class RolloutDetailResponse(RolloutResponse):
     target_all: bool
     target_user_ids: list[str] | None
     target_printer_ids: list[str] | None
+    target_platforms: list[str] | None
     target_channels: list[str] | None
     min_version: str | None
     max_version: str | None
@@ -210,6 +215,7 @@ class FirmwareUpdateMessage(BaseModel):
 
     kind: Literal["firmware_update"] = "firmware_update"
     version: str = Field(..., description="Target firmware version")
+    platform: str = Field(..., description="Target platform")
     url: str = Field(..., description="HTTPS URL to download firmware")
     md5: str = Field(..., description="MD5 checksum for verification")
 
@@ -253,6 +259,7 @@ class ExtendedSubscriptionRequest(BaseModel):
 
     printer_name: str = Field(..., min_length=1, description="Human readable printer identifier")
     api_key: str = Field(..., min_length=1, description="API key for authorization")
+    platform: str = Field("esp8266", min_length=1, max_length=32, description="Printer hardware platform")
     firmware_version: str = Field("0.0.0", description="Current firmware version on printer")
     auto_update: bool = Field(True, description="Whether printer accepts automatic updates")
     update_channel: Literal["stable", "beta", "canary"] = Field(
