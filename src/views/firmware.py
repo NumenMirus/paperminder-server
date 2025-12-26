@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.responses import Response
 from authx import RequestToken
 
@@ -144,11 +144,16 @@ async def get_firmware_by_version(
 
 
 @router.get("/firmware/download/{platform}/{version}")
+@router.head("/firmware/download/{platform}/{version}")
 async def download_firmware(
     platform: str,
-    version: str
+    version: str,
+    request: Request
 ) -> Response:
-    """Download firmware binary by platform and version."""
+    """Download firmware binary by platform and version.
+
+    Supports both GET (download) and HEAD (metadata check) methods.
+    """
     firmware = FirmwareService.get_firmware(version, platform)
     if not firmware:
         raise HTTPException(
@@ -156,16 +161,18 @@ async def download_firmware(
             detail=f"Firmware version {version} for platform {platform} not found",
         )
 
-    # Record download for statistics
-    FirmwareService.record_download(firmware.id)
+    # Record download for statistics only on GET requests, not HEAD
+    if request.method == "GET":
+        FirmwareService.record_download(firmware.id)
 
-    # Return firmware as binary response
+    # Return firmware as binary response (HEAD will return headers only)
     return Response(
         content=firmware.file_data,
         media_type="application/octet-stream",
         headers={
             "Content-Disposition": f'attachment; filename="paperminder-{platform}-{version}.bin"',
             "Content-MD5": firmware.md5_checksum,
+            "Content-Length": str(firmware.file_size),
         },
     )
 
