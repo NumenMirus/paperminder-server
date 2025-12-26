@@ -16,6 +16,7 @@ from src.models.firmware import (
     FirmwareCompleteMessage,
     FirmwareFailedMessage,
 )
+from src.crud import update_printer_connection_status
 
 
 ws_router = APIRouter(tags=["websocket"])
@@ -101,6 +102,13 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                 )
     except WebSocketDisconnect:
         await connection_manager.disconnect(user_key, websocket)
+        # Update printer status to offline when disconnected
+        import asyncio
+        await asyncio.to_thread(
+            update_printer_connection_status,
+            uuid=user_key,
+            online=False,
+        )
 
 
 async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:

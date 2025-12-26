@@ -16,6 +16,7 @@ from src.crud import (
     mark_update_complete,
     mark_update_failed,
     mark_update_declined,
+    get_printer_update_history,
     compare_versions,
 )
 from src.services.firmware_service import FirmwareService
@@ -193,7 +194,12 @@ class UpdateService:
         Returns:
             True if handled, False otherwise
         """
-        # Update printer's firmware version
+        # Get printer to determine platform
+        printer = get_printer(printer_uuid)
+        if not printer:
+            return False
+
+        # Update printer's firmware version and platform
         success = update_printer_firmware_info(
             uuid=printer_uuid,
             firmware_version=version,
@@ -203,8 +209,8 @@ class UpdateService:
         if success:
             mark_update_complete(printer_uuid, version)
 
-            # Update firmware statistics
-            firmware = FirmwareService.get_firmware(version)
+            # Update firmware statistics for the specific platform
+            firmware = FirmwareService.get_firmware(version, printer.platform)
             if firmware:
                 FirmwareService.record_success(firmware.id)
 
@@ -224,15 +230,23 @@ class UpdateService:
         Returns:
             True if handled, False otherwise
         """
+        # Get printer and pending update info
+        printer = get_printer(printer_uuid)
+        if not printer:
+            return False
+
         # Mark update as failed
         success = mark_update_failed(
             printer_id=printer_uuid,
             error_message=error_message,
         )
 
-        # Get the latest pending update to record failure statistics
-        # Note: This would require additional tracking to get the firmware_id
-        # For now, we'll skip the statistics update
+        # Get the pending update to record failure statistics
+        pending_update = get_printer_update_history(printer_uuid, limit=1)
+        if pending_update and pending_update[0].firmware_version:
+            firmware = FirmwareService.get_firmware(pending_update[0].firmware_version, printer.platform)
+            if firmware:
+                FirmwareService.record_failure(firmware.id)
 
         return success
 
