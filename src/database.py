@@ -243,7 +243,7 @@ class UpdateRollout(Base):
     __tablename__ = "update_rollouts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    firmware_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("firmware_versions.id"), nullable=False, index=True)
+    firmware_version: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # Version string (platform-agnostic)
 
     # Targeting (stored as JSON strings for SQLite compatibility)
     target_all: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -271,8 +271,9 @@ class UpdateRollout(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    # Relationships
-    firmware_version: Mapped[FirmwareVersion] = relationship("FirmwareVersion", foreign_keys=[firmware_version_id])
+    # Note: No relationship to FirmwareVersion since rollouts are platform-agnostic
+    # The firmware_version field stores just the version string (e.g., "1.2.0")
+    # and each printer gets firmware for its own platform when update is delivered
 
 
 class UpdateHistory(Base):

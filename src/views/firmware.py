@@ -502,13 +502,19 @@ def _printer_to_response(printer: Printer) -> PrinterDetailsResponse:
 
 def _rollout_to_response(rollout: UpdateRollout) -> RolloutResponse:
     """Convert database model to response model."""
-    # Get firmware version
-    firmware = get_firmware_version_by_id(rollout.firmware_version_id)
+    # Get firmware version string directly from rollout
+    firmware_version = rollout.firmware_version
+
+    # Get channel from any firmware with this version (rollout is platform-agnostic)
+    # We'll just use the first one we find for display purposes
+    all_firmware = get_all_firmware_versions()
+    firmware = next((fw for fw in all_firmware if fw.version == firmware_version), None)
+    channel = firmware.channel if firmware else "stable"
 
     return RolloutResponse(
         id=rollout.id,
-        firmware_version=firmware.version if firmware else "unknown",
-        channel=firmware.channel if firmware else "unknown",
+        firmware_version=firmware_version,
+        channel=channel,
         status=rollout.status,
         rollout_type=rollout.rollout_type,
         rollout_percentage=rollout.rollout_percentage,

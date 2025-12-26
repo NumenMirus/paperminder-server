@@ -40,10 +40,10 @@ class RolloutService:
         rollout_percentage: int = 100,
         scheduled_for: datetime | None = None,
     ) -> UpdateRollout:
-        """Create a new firmware rollout.
+        """Create a new firmware rollout (platform-agnostic).
 
         Args:
-            firmware_version: Target firmware version
+            firmware_version: Target firmware version string (e.g., "1.2.0")
             target_all: Whether to target all printers
             target_user_ids: Optional list of user IDs to target
             target_printer_ids: Optional list of printer IDs to target
@@ -58,13 +58,12 @@ class RolloutService:
             The created UpdateRollout object
 
         Raises:
-            ValueError: If firmware version not found or validation fails
-        """
-        # Get firmware version
-        firmware = FirmwareService.get_firmware(firmware_version)
-        if not firmware:
-            raise ValueError(f"Firmware version {firmware_version} not found")
+            ValueError: If validation fails
 
+        Note:
+            Rollouts are platform-agnostic. Each printer will receive firmware
+            for its own platform when the update is delivered.
+        """
         # Validate rollout type
         if rollout_type not in ["immediate", "gradual", "scheduled"]:
             raise ValueError(f"Invalid rollout type: {rollout_type}")
@@ -77,9 +76,9 @@ class RolloutService:
         if rollout_type == "scheduled" and not scheduled_for:
             raise ValueError("Scheduled time required for scheduled rollouts")
 
-        # Create rollout
+        # Create rollout (firmware_version is stored as string, platform-agnostic)
         rollout = create_rollout(
-            firmware_version_id=firmware.id,
+            firmware_version=firmware_version,
             target_all=target_all,
             target_user_ids=target_user_ids,
             target_printer_ids=target_printer_ids,
@@ -169,8 +168,10 @@ class RolloutService:
     async def _notify_connected_printers(rollout: UpdateRollout, target_printers: list[Printer]) -> None:
         """Push firmware updates to currently connected printers.
 
+        Each printer receives firmware for their own platform.
+
         Args:
-            rollout: The rollout object
+            rollout: The rollout object (platform-agnostic)
             target_printers: List of target Printer objects
         """
         # Import here to avoid circular dependency
@@ -178,28 +179,14 @@ class RolloutService:
         from src.services.update_service import UpdateService
         from src.config import get_settings
 
-        # Get firmware version details
-        firmware = FirmwareService.get_firmware_by_id(rollout.firmware_version_id)
-        if not firmware:
-            logging.getLogger(__name__).error(f"Firmware version {rollout.firmware_version_id} not found for rollout {rollout.id}")
-            return
-
         # Get base URL for firmware downloads
         settings = get_settings()
         base_url = getattr(settings, 'base_url', 'http://localhost:8000')
 
-        # Create firmware update message
-        import json
-        update_message = {
-            "kind": "firmware_update",
-            "version": firmware.version,
-            "url": f"{base_url}/api/firmware/download/{firmware.version}",
-            "md5": firmware.md5_checksum
-        }
-
         logger = logging.getLogger(__name__)
         notified_count = 0
         not_connected_count = 0
+        skipped_no_firmware = 0
 
         # Track printers that were actually notified (to decrement pending_count)
         notified_printers = []
@@ -211,6 +198,23 @@ class RolloutService:
                 if printer.auto_update:
                     # Check rollout timing
                     if RolloutService._should_update_now(rollout, printer):
+                        # Get firmware for this printer's platform
+                        firmware = FirmwareService.get_firmware(rollout.firmware_version, printer.platform)
+
+                        if not firmware:
+                            logger.warning(f"No firmware found for platform {printer.platform} version {rollout.firmware_version}")
+                            skipped_no_firmware += 1
+                            continue
+
+                        # Create platform-specific firmware update message
+                        update_message = {
+                            "kind": "firmware_update",
+                            "version": firmware.version,
+                            "platform": firmware.platform,
+                            "url": f"{base_url}/api/firmware/download/{firmware.platform}/{firmware.version}",
+                            "md5": firmware.md5_checksum
+                        }
+
                         # Send firmware update
                         sent = await connection_manager.send_firmware_update(printer.uuid, update_message)
                         if sent:
@@ -244,7 +248,11 @@ class RolloutService:
                 pending_decrement=len(notified_printers),
             )
 
-        logger.info(f"Rollout {rollout.id}: Notified {notified_count} connected printers, {not_connected_count} offline/disconnected")
+        logger.info(
+            f"Rollout {rollout.id}: Notified {notified_count} connected printers, "
+            f"{not_connected_count} offline/disconnected, "
+            f"{skipped_no_firmware} skipped (no firmware for their platform)"
+        )
 
     @staticmethod
     def _should_update_now(rollout: UpdateRollout, printer: Printer) -> bool:

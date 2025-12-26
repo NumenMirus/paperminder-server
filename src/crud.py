@@ -1216,7 +1216,7 @@ def deprecate_firmware_version(version: str) -> bool:
 
 
 def create_rollout(
-    firmware_version_id: int,
+    firmware_version: str,
     target_all: bool = False,
     target_user_ids: list[str] | None = None,
     target_printer_ids: list[str] | None = None,
@@ -1230,7 +1230,7 @@ def create_rollout(
     """Create a new update rollout.
 
     Args:
-        firmware_version_id: The firmware version database ID
+        firmware_version: The firmware version string (platform-agnostic)
         target_all: Whether to target all printers
         target_user_ids: Optional list of user IDs to target
         target_printer_ids: Optional list of printer IDs to target
@@ -1247,7 +1247,7 @@ def create_rollout(
     import json
     with session_scope() as session:
         rollout = UpdateRollout(
-            firmware_version_id=firmware_version_id,
+            firmware_version=firmware_version,
             target_all=target_all,
             target_user_ids=json.dumps(target_user_ids) if target_user_ids else None,
             target_printer_ids=json.dumps(target_printer_ids) if target_printer_ids else None,
@@ -1407,14 +1407,10 @@ def get_active_rollout_for_printer(
         if not printer:
             return None
 
-        firmware = session.query(FirmwareVersion).filter_by(version=firmware_version).first()
-        if not firmware:
-            return None
-
-        # Find active rollout for this firmware version
+        # Find active rollout for this firmware version (platform-agnostic)
         rollout = (
             session.query(UpdateRollout)
-            .filter_by(firmware_version_id=firmware.id, status="active")
+            .filter_by(firmware_version=firmware_version, status="active")
             .first()
         )
 

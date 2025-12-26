@@ -100,7 +100,6 @@ class RolloutTargetSpec(BaseModel):
     all: bool = Field(False, description="Target all printers")
     user_ids: list[UUID] | None = Field(None, description="Specific user IDs to target")
     printer_ids: list[UUID] | None = Field(None, description="Specific printer IDs to target")
-    platforms: list[str] | None = Field(None, description="Platforms to target (e.g., ['esp8266', 'esp32'])")
     channels: list[str] | None = Field(None, description="Update channels to target")
     min_version: str | None = Field(None, max_length=16, description="Minimum firmware version to target")
     max_version: str | None = Field(None, max_length=16, description="Maximum firmware version to target")
@@ -165,7 +164,6 @@ class RolloutDetailResponse(RolloutResponse):
     target_all: bool
     target_user_ids: list[str] | None
     target_printer_ids: list[str] | None
-    target_platforms: list[str] | None
     target_channels: list[str] | None
     min_version: str | None
     max_version: str | None

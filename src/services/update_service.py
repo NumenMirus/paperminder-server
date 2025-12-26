@@ -33,6 +33,10 @@ class UpdateService:
 
         Returns:
             FirmwareVersion if update available, None otherwise
+
+        Note:
+            This checks for rollouts targeting the printer, then fetches the
+            appropriate firmware for the printer's platform.
         """
         printer = get_printer(printer_uuid)
         if not printer:
@@ -49,11 +53,16 @@ class UpdateService:
 
         # Check if update is needed
         if compare_versions(latest.version, printer.firmware_version) > 0:
-            # Check if there's an active rollout for this printer
+            # Check if there's an active rollout for this printer and version
             rollout = get_active_rollout_for_printer(printer_uuid, latest.version)
 
             if rollout and UpdateService.should_update_now(rollout, printer):
-                return latest
+                # Rollout exists - get firmware for this specific printer's platform
+                platform_firmware = FirmwareService.get_firmware(latest.version, printer.platform)
+                if platform_firmware:
+                    return platform_firmware
+                # If no firmware exists for this printer's platform, skip update
+                return None
 
         return None
 
