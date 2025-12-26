@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import UTC, datetime
 
 from src.database import Printer, FirmwareVersion, UpdateRollout
@@ -20,6 +21,8 @@ from src.crud import (
     compare_versions,
 )
 from src.services.firmware_service import FirmwareService
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateService:
@@ -197,6 +200,7 @@ class UpdateService:
         # Get printer to determine platform
         printer = get_printer(printer_uuid)
         if not printer:
+            logger.error(f"Printer {printer_uuid} not found when handling firmware complete for version {version}")
             return False
 
         # Update printer's firmware version and platform
@@ -213,6 +217,20 @@ class UpdateService:
             firmware = FirmwareService.get_firmware(version, printer.platform)
             if firmware:
                 FirmwareService.record_success(firmware.id)
+                logger.info(
+                    f"Printer {printer_uuid} successfully updated to firmware {version} "
+                    f"(platform={printer.platform})"
+                )
+            else:
+                logger.warning(
+                    f"Firmware {version} for platform {printer.platform} not found "
+                    f"when recording success for printer {printer_uuid}"
+                )
+        else:
+            logger.error(
+                f"Failed to update printer {printer_uuid} firmware version to {version} "
+                f"after successful update"
+            )
 
         return success
 
@@ -233,6 +251,7 @@ class UpdateService:
         # Get printer and pending update info
         printer = get_printer(printer_uuid)
         if not printer:
+            logger.error(f"Printer {printer_uuid} not found when handling firmware failure: {error_message}")
             return False
 
         # Mark update as failed
@@ -247,6 +266,19 @@ class UpdateService:
             firmware = FirmwareService.get_firmware(pending_update[0].firmware_version, printer.platform)
             if firmware:
                 FirmwareService.record_failure(firmware.id)
+                logger.warning(
+                    f"Printer {printer_uuid} failed to update to firmware {pending_update[0].firmware_version} "
+                    f"(platform={printer.platform}): {error_message}"
+                )
+            else:
+                logger.warning(
+                    f"Firmware {pending_update[0].firmware_version} for platform {printer.platform} not found "
+                    f"when recording failure for printer {printer_uuid}"
+                )
+        else:
+            logger.warning(
+                f"No pending update found for printer {printer_uuid} when handling failure"
+            )
 
         return success
 
@@ -294,7 +326,7 @@ class UpdateService:
         Returns:
             True if updated, False if printer not found
         """
-        # Update firmware info
+        # Update firmware info first (this may fail if printer not found)
         success = update_printer_firmware_info(
             uuid=printer_uuid,
             firmware_version=firmware_version,
@@ -303,12 +335,28 @@ class UpdateService:
             update_channel=update_channel,
         )
 
-        if success:
-            # Update connection status
-            update_printer_connection_status(
-                uuid=printer_uuid,
-                online=online,
-                last_ip=last_ip,
+        if not success:
+            logger.warning(
+                f"Failed to update firmware info for printer {printer_uuid} "
+                f"(version={firmware_version}, platform={platform}, channel={update_channel})"
+            )
+
+        # Always update connection status, even if firmware info update failed
+        # This ensures the online field is correct even if printer UUID is invalid
+        connection_success = update_printer_connection_status(
+            uuid=printer_uuid,
+            online=online,
+            last_ip=last_ip,
+        )
+
+        if not connection_success:
+            logger.error(
+                f"Failed to update connection status for printer {printer_uuid} "
+                f"(online={online}). Printer may not exist in database."
+            )
+        else:
+            logger.info(
+                f"Updated printer {printer_uuid} connection status: online={online}"
             )
 
         return success

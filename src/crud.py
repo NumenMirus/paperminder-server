@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from sqlalchemy import or_
+
+logger = logging.getLogger(__name__)
 
 from src.database import (
     Base,
@@ -947,15 +950,41 @@ def update_printer_firmware_info(
     with session_scope() as session:
         printer = session.query(Printer).filter_by(uuid=uuid).first()
         if printer is None:
+            logger.warning(
+                f"Failed to update firmware info for printer {uuid}: "
+                f"Printer not found in database"
+            )
             return False
+
+        updated = False
         if firmware_version is not None:
+            old_version = printer.firmware_version
             printer.firmware_version = firmware_version
+            if old_version != firmware_version:
+                logger.info(f"Printer {uuid} firmware version: {old_version} -> {firmware_version}")
+                updated = True
+
         if platform is not None:
+            old_platform = printer.platform
             printer.platform = platform
+            if old_platform != platform:
+                logger.info(f"Printer {uuid} platform: {old_platform} -> {platform}")
+                updated = True
+
         if auto_update is not None:
             printer.auto_update = auto_update
+            updated = True
+
         if update_channel is not None:
+            old_channel = printer.update_channel
             printer.update_channel = update_channel
+            if old_channel != update_channel:
+                logger.info(f"Printer {uuid} update channel: {old_channel} -> {update_channel}")
+                updated = True
+
+        if updated:
+            logger.debug(f"Printer {uuid} firmware info updated successfully")
+
         return True
 
 
@@ -979,7 +1008,13 @@ def update_printer_connection_status(
     with session_scope() as session:
         printer = session.query(Printer).filter_by(uuid=uuid).first()
         if printer is None:
+            logger.warning(
+                f"Failed to update connection status for printer {uuid}: "
+                f"Printer not found in database (online={online})"
+            )
             return False
+
+        old_online = printer.online
         printer.online = online
         if last_connected is not None:
             printer.last_connected = last_connected
@@ -987,6 +1022,12 @@ def update_printer_connection_status(
             printer.last_connected = _utcnow()
         if last_ip is not None:
             printer.last_ip = last_ip
+
+        if old_online != online:
+            logger.info(
+                f"Printer {uuid} connection status changed: {old_online} -> {online}"
+            )
+
         return True
 
 
