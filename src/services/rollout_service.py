@@ -99,14 +99,15 @@ class RolloutService:
         return rollout
 
     @staticmethod
-    def _calculate_rollout_targets(rollout: UpdateRollout) -> None:
+    def _calculate_rollout_targets(rollout: UpdateRollout) -> list[Printer]:
         """Calculate target printers for a rollout and update counters.
 
         Args:
             rollout: The rollout to calculate targets for
+
+        Returns:
+            List of unique target printers
         """
-        # Build filter criteria
-        filters = {}
 
         if rollout.target_channels:
             # For channel-based targeting, we need to get printers matching those channels
@@ -150,10 +151,10 @@ class RolloutService:
         # Update rollout counters
         from src.database import session_scope
         with session_scope() as session:
-            rollout = session.query(UpdateRollout).filter_by(id=rollout.id).first()
-            if rollout:
-                rollout.total_targets = len(unique_printers)
-                rollout.pending_count = len(unique_printers)
+            rollout_update = session.query(UpdateRollout).filter_by(id=rollout.id).first()
+            if rollout_update:
+                rollout_update.total_targets = len(unique_printers)
+                rollout_update.pending_count = len(unique_printers)
                 session.flush()
 
         return unique_printers
@@ -170,7 +171,6 @@ class RolloutService:
         """
         # Import here to avoid circular dependency
         from src.controllers.message_controller import connection_manager
-        from src.services.update_service import UpdateService
         from src.config import get_settings
 
         # Get base URL for firmware downloads
@@ -259,7 +259,6 @@ class RolloutService:
         Returns:
             True if printer should update now, False otherwise
         """
-        from src.services.update_service import UpdateService
         import hashlib
 
         # For scheduled rollouts, check if time has arrived
