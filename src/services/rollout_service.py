@@ -187,16 +187,19 @@ class RolloutService:
 
         # Notify connected printers
         for printer in target_printers:
+            from src.utils.platform import normalize_platform
+
+            printer_platform = normalize_platform(printer.platform) or printer.platform
             # Check if printer is connected and has auto_update enabled
             if connection_manager.is_printer_connected(printer.uuid):
                 if printer.auto_update:
                     # Check rollout timing
                     if RolloutService._should_update_now(rollout, printer):
                         # Get firmware for this printer's platform
-                        firmware = FirmwareService.get_firmware(rollout.firmware_version, printer.platform)
+                        firmware = FirmwareService.get_firmware(rollout.firmware_version, printer_platform)
 
                         if not firmware:
-                            logger.warning(f"No firmware found for platform {printer.platform} version {rollout.firmware_version}")
+                            logger.warning(f"No firmware found for platform {printer_platform} version {rollout.firmware_version}")
                             skipped_no_firmware += 1
                             continue
 

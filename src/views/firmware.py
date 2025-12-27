@@ -468,10 +468,12 @@ async def delete_rollout(
 
 def _firmware_to_response(firmware: FirmwareVersion) -> FirmwareVersionResponse:
     """Convert database model to response model."""
+    from src.utils.platform import normalize_platform
+
     return FirmwareVersionResponse(
         id=firmware.id,
         version=firmware.version,
-        platform=firmware.platform,
+        platform=normalize_platform(firmware.platform) or firmware.platform,
         channel=firmware.channel,
         file_size=firmware.file_size,
         md5_checksum=firmware.md5_checksum,
@@ -490,6 +492,8 @@ def _firmware_to_response(firmware: FirmwareVersion) -> FirmwareVersionResponse:
 
 def _printer_to_response(printer: Printer) -> PrinterDetailsResponse:
     """Convert database model to response model."""
+    from src.utils.platform import normalize_platform
+
     return PrinterDetailsResponse(
         id=printer.id,
         name=printer.name,
@@ -497,7 +501,7 @@ def _printer_to_response(printer: Printer) -> PrinterDetailsResponse:
         location=printer.location,
         user_uuid=UUID(printer.user_uuid),
         created_at=printer.created_at,
-        platform=printer.platform,
+        platform=normalize_platform(printer.platform) or printer.platform,
         firmware_version=printer.firmware_version,
         auto_update=printer.auto_update,
         update_channel=printer.update_channel,

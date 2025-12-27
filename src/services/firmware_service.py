@@ -258,7 +258,10 @@ class FirmwareService:
         Returns:
             The download URL
         """
-        return f"{base_url}/api/firmware/download/{platform}/{firmware_version}"
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(platform) or platform
+        return f"{base_url}/api/firmware/download/{normalized_platform}/{firmware_version}"
 
     @staticmethod
     def _is_valid_version(version: str) -> bool:

@@ -125,12 +125,15 @@ class UpdateService:
         Returns:
             Dictionary containing the firmware update message
         """
-        download_url = FirmwareService.generate_download_url(firmware.version, firmware.platform, base_url)
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(firmware.platform) or firmware.platform
+        download_url = FirmwareService.generate_download_url(firmware.version, normalized_platform, base_url)
 
         return {
             "kind": "firmware_update",
             "version": firmware.version,
-            "platform": firmware.platform,
+            "platform": normalized_platform,
             "url": download_url,
             "md5": firmware.md5_checksum,
         }
