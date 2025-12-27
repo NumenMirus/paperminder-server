@@ -188,6 +188,13 @@ class ConnectionManager:
 
     async def send_personal_message(self, sender_id: str, message: InboundMessage) -> None:
         recipient_key = str(message.recipient_id)
+        
+        # Validate that recipient printer exists
+        from src.crud import get_printer
+        printer = await asyncio.to_thread(get_printer, recipient_key)
+        if not printer:
+            raise RecipientNotFoundError(f"Printer '{recipient_key}' not found")
+        
         async with self._lock:
             recipients = list(self._connections.get(recipient_key, []))
 
