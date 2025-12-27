@@ -40,7 +40,7 @@ async def send_message(payload: MessageRequest, response: Response) -> dict[str,
     )
 
     try:
-        await connection_manager.send_personal_message(sender_id=payload.sender_name, message=inbound)
+        await connection_manager.send_personal_message(sender_id=str(payload.sender_uuid), message=inbound)
         # Message was successfully sent to connected recipient
         return {"status": "sent"}
 

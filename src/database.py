@@ -141,19 +141,19 @@ class PrinterGroup(Base):
 
 
 class MessageLog(Base):
-    """ORM model representing a delivered message."""
+    """ORM model representing a message from a user to a printer."""
 
     __tablename__ = "message_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sender_uuid: Mapped[str] = mapped_column(String(36), ForeignKey("users.uuid"), nullable=False, index=True)
-    recipient_uuid: Mapped[str] = mapped_column(String(36), ForeignKey("users.uuid"), nullable=False, index=True)
+    recipient_uuid: Mapped[str] = mapped_column(String(36), ForeignKey("printers.uuid"), nullable=False, index=True)
     message_body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     # Relationships
     sender: Mapped[User] = relationship("User", foreign_keys=[sender_uuid], backref="sent_messages")
-    recipient: Mapped[User] = relationship("User", foreign_keys=[recipient_uuid], backref="received_messages")
+    recipient: Mapped[Printer] = relationship("Printer", foreign_keys=[recipient_uuid], backref="received_messages")
 
 
 class Printer(Base):
