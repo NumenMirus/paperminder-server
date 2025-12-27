@@ -90,12 +90,20 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("daily_message_number", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("last_message_number_reset_date", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("platform", sa.String(length=32), nullable=False, server_default=sa.text("'esp8266'")),
+        sa.Column("firmware_version", sa.String(length=16), nullable=False, server_default=sa.text("'0.0.0'")),
+        sa.Column("auto_update", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("update_channel", sa.String(length=16), nullable=False, server_default=sa.text("'stable'")),
+        sa.Column("last_connected", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_ip", sa.String(length=45), nullable=True),
+        sa.Column("online", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["user_uuid"], ["users.uuid"]),
     )
     op.create_index("ix_printers_id", "printers", ["id"])
     op.create_index("ix_printers_uuid", "printers", ["uuid"], unique=True)
     op.create_index("ix_printers_user_uuid", "printers", ["user_uuid"])
+    op.create_index("ix_printers_platform", "printers", ["platform"])
 
     # Create printer_groups table
     op.create_table(
@@ -256,6 +264,7 @@ def downgrade() -> None:
     op.drop_index("ix_printer_groups_id", "printer_groups")
     op.drop_table("printer_groups")
 
+    op.drop_index("ix_printers_platform", "printers")
     op.drop_index("ix_printers_user_uuid", "printers")
     op.drop_index("ix_printers_uuid", "printers")
     op.drop_index("ix_printers_id", "printers")

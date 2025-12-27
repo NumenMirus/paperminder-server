@@ -15,7 +15,7 @@ from src.views import (
 from src.config import auth
 
 def create_app(*, database_url: str | None = None) -> FastAPI:
-    init_db(database_url)
+    #init_db(database_url)
 
     app = FastAPI(
         title="PaperMinder Messaging Service",

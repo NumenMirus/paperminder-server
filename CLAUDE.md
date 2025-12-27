@@ -52,49 +52,49 @@ The application uses SQLAlchemy with PostgreSQL by default. Database URL must be
 # Set database URL (required for PostgreSQL)
 export DATABASE_URL="postgresql://user:pass@host:5432/dbname"
 
-# Initialize database with migrations
-DATABASE_URL="..." uv run python migrate.py init
-
-# Apply pending migrations
-DATABASE_URL="..." uv run python migrate.py upgrade
+# Initialize database with migrations (apply all migrations)
+DATABASE_URL="..." uv run alembic upgrade head
 
 # Reset database (for development/testing - DELETES ALL DATA)
-DATABASE_URL="..." uv run python migrate.py reset --force
+DATABASE_URL="..." uv run python -c "from src.database import reset_database; reset_database()"
 ```
 
 ### Database Migrations
-The project uses Alembic for database migrations. The migration utility script (`migrate.py`) provides convenient commands for managing database schema changes.
+The project uses Alembic for database migrations. Use Alembic commands directly to manage schema changes.
 
 **Important:** Always set `DATABASE_URL` before running migration commands.
 
 ```bash
 # Apply pending migrations
-DATABASE_URL="..." uv run python migrate.py upgrade
+DATABASE_URL="..." uv run alembic upgrade head
 
 # Rollback one migration
-DATABASE_URL="..." uv run python migrate.py downgrade
+DATABASE_URL="..." uv run alembic downgrade -1
 
 # Rollback multiple migrations
-DATABASE_URL="..." uv run python migrate.py downgrade -2
+DATABASE_URL="..." uv run alembic downgrade -2
 
 # Create a new migration with auto-generated changes
-DATABASE_URL="..." uv run python migrate.py create "add user avatar field"
+DATABASE_URL="..." uv run alembic revision --autogenerate -m "add user avatar field"
 
 # Create a new empty migration
-DATABASE_URL="..." uv run python migrate.py revision "fix index on users table"
+DATABASE_URL="..." uv run alembic revision -m "fix index on users table"
 
 # Show current migration version
-DATABASE_URL="..." uv run python migrate.py current
+DATABASE_URL="..." uv run alembic current
 
 # Show migration history
-DATABASE_URL="..." uv run python migrate.py history
+DATABASE_URL="..." uv run alembic history
+
+# View detailed migration info
+DATABASE_URL="..." uv run alembic show <revision_id>
 ```
 
 **Migration Workflow:**
 1. Make model changes in `src/database.py`
-2. Run `DATABASE_URL="..." uv run python migrate.py create "description"` to auto-generate migration
+2. Run `DATABASE_URL="..." uv run alembic revision --autogenerate -m "description"` to auto-generate migration
 3. Review the generated migration file in `alembic/versions/`
-4. Run `DATABASE_URL="..." uv run python migrate.py upgrade` to apply the migration
+4. Run `DATABASE_URL="..." uv run alembic upgrade head` to apply the migration
 5. Test the changes
 
 **Important Notes:**
@@ -103,7 +103,7 @@ DATABASE_URL="..." uv run python migrate.py history
 - For JSONB columns, use `postgresql.JSONB()` type
 - Boolean defaults use lowercase text: `server_default=sa.text("true")` or `sa.text("false")`
 - Integer defaults don't need quotes: `server_default=sa.text("0")`
-- The migration script automatically handles both SQLite and PostgreSQL via `DATABASE_URL` prefix
+- The migration system automatically handles both SQLite and PostgreSQL via `DATABASE_URL` prefix
 
 
 ## Architecture Overview
