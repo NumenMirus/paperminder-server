@@ -63,8 +63,8 @@ class SubscriptionRequest(BaseModel):
 
     printer_name: str = Field(..., min_length=1, description="Human readable printer identifier")
     api_key: str = Field(..., min_length=1, description="API key used to authorise the printer subscription")
-    # Firmware tracking fields (optional for backward compatibility)
-    platform: str | None = Field(None, description="Printer hardware platform (e.g., esp8266, esp32)")
+    # Firmware tracking fields
+    platform: str = Field(..., min_length=1, description="Printer hardware platform (e.g., esp8266, esp32) - REQUIRED for correct firmware updates")
     firmware_version: str | None = Field(None, description="Current firmware version on printer")
     auto_update: bool | None = Field(None, description="Whether printer accepts automatic updates")
     update_channel: str | None = Field(None, description="Printer's update channel (stable, beta, canary)")

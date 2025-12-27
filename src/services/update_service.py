@@ -340,6 +340,12 @@ class UpdateService:
                 f"Failed to update firmware info for printer {printer_uuid} "
                 f"(version={firmware_version}, platform={platform}, channel={update_channel})"
             )
+        elif platform is None:
+            logger.warning(
+                f"Printer {printer_uuid} subscribed without specifying platform. "
+                f"Current platform in database will be used. "
+                f"Printers should always send 'platform' field in subscription to ensure correct firmware updates."
+            )
 
         # Always update connection status, even if firmware info update failed
         # This ensures the online field is correct even if printer UUID is invalid
