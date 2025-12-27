@@ -1,8 +1,5 @@
 from authx import AuthX, AuthXConfig
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
-import logging
-import os
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -12,16 +9,9 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
     max_firmware_size: int = 5 * 1024 * 1024  # 5MB
 
-    # Logging configuration
-    # Supports both LOG_LEVEL and LOGLEVEL environment variables
-    log_level: str = Field(default="INFO", alias="LOGLEVEL")
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        populate_by_name=True,  # Allow both field name and alias
-    )
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
 auth_config = AuthXConfig(
@@ -47,34 +37,6 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
-
-
-def configure_logging() -> None:
-    """Configure application logging based on settings."""
-    settings = get_settings()
-
-    # Convert string level to logging constant
-    numeric_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-
-    # Configure root logger
-    # Use force=True to override any existing configuration
-    logging.basicConfig(
-        level=numeric_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        force=True  # Python 3.8+: override existing handlers
-    )
-
-    # Configure root logger directly (more reliable)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(numeric_level)
-
-    # Configure specific loggers
-    for logger_name in ['uvicorn', 'uvicorn.access', 'uvicorn.error', 'src']:
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(numeric_level)
-        # Ensure it propagates to root
-        logger.propagate = True
 
 
 # ============================================================================

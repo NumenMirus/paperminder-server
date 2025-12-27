@@ -118,7 +118,6 @@ class ConnectionManager:
         payload = json.dumps(update_message)
         for socket in sockets:
             await socket.send_text(payload)
-            self._logger.debug(f"Sent firmware update to {printer_uuid}: {payload}")
 
         return True
 
@@ -214,7 +213,6 @@ class ConnectionManager:
         if recipients:
             for websocket in recipients:
                 await websocket.send_text(payload)
-                self._logger.debug(f"Sent to {recipient_key}: {payload}")
         else:
             # Cache the message for when the recipient comes back online
             try:
@@ -235,11 +233,7 @@ class ConnectionManager:
             self._logger.exception("Failed to persist message log")
 
     async def notify(self, websocket: WebSocket, status: StatusMessage) -> None:
-        payload = status.model_dump_json()
-        await websocket.send_text(payload)
-        # Skip logging for ping/pong keep-alive status messages
-        if status.code not in ["ping", "pong"]:
-            self._logger.debug(f"Sent status message: {payload}")
+        await websocket.send_text(status.model_dump_json())
 
     async def send_cached_messages(self, user_id: str, websocket: WebSocket) -> None:
         """Send all cached messages to a user who just came online."""
@@ -259,9 +253,7 @@ class ConnectionManager:
                         timestamp=cached.created_at,
                         daily_number=daily_number,
                     )
-                    payload = outbound.model_dump_json()
-                    await websocket.send_text(payload)
-                    self._logger.debug(f"Sent cached message to {user_id}: {payload}")
+                    await websocket.send_text(outbound.model_dump_json())
 
                 # Mark all cached messages as delivered
                 await asyncio.to_thread(MessageService.mark_as_delivered, user_id)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 import json
-import logging
 from json import JSONDecodeError
 from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
@@ -19,8 +18,6 @@ from src.models.firmware import (
 )
 from src.crud import update_printer_connection_status
 
-logger = logging.getLogger(__name__)
-
 
 ws_router = APIRouter(tags=["websocket"])
 
@@ -29,11 +26,7 @@ ws_router = APIRouter(tags=["websocket"])
 async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
     """WebSocket endpoint for real-time messaging and firmware updates."""
     user_key = str(user_id)
-    logger.debug(f"WebSocket connection attempt from user_id={user_key}")
-
     await connection_manager.connect(user_key, websocket)
-    logger.debug(f"WebSocket connected for user_id={user_key}")
-
     await connection_manager.notify(
         websocket,
         StatusMessage(code="info", detail="connected"),
@@ -45,7 +38,6 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
     try:
         while True:
             raw_payload = await websocket.receive_text()
-
             try:
                 payload = json.loads(raw_payload)
             except JSONDecodeError as exc:
@@ -61,11 +53,6 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                     StatusMessage(code="validation_error", detail="Payload must be a JSON object."),
                 )
                 continue
-
-            # Skip logging ping/pong keep-alive messages
-            message_kind = payload.get("kind")
-            if message_kind not in ["ping", "pong"]:
-                logger.debug(f"Received from user_id={user_key}: {raw_payload}")
 
             # Handle printer subscription
             if {"printer_name", "api_key"}.issubset(payload):
@@ -96,7 +83,6 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
             # Handle regular messages
             try:
                 message = InboundMessage.model_validate(payload)
-                recipient_id_str = str(message.recipient_id)
             except ValidationError as exc:
                 await connection_manager.notify(
                     websocket,
@@ -111,11 +97,10 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                     websocket,
                     StatusMessage(
                         code="recipient_not_connected",
-                        detail=f"Recipient '{recipient_id_str}' is not connected.",
+                        detail=f"Recipient '{message.recipient_id}' is not connected.",
                     ),
                 )
     except WebSocketDisconnect:
-        logger.debug(f"WebSocket disconnected for user_id={user_key}")
         await connection_manager.disconnect(user_key, websocket)
         # Update printer status to offline when disconnected
         import asyncio
@@ -168,8 +153,10 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
 
     except ValidationError as exc:
         # Log validation error - can't send notification without websocket reference
-        logger.error(f"Firmware message validation error: {exc}")
+        import logging
+        logging.getLogger(__name__).error(f"Firmware message validation error: {exc}")
     except Exception as exc:
         # Log error but don't send notification to avoid infinite loop
-        logger.exception(f"Failed to handle firmware message: {exc}")
+        import logging
+        logging.getLogger(__name__).exception(f"Failed to handle firmware message: {exc}")
 
