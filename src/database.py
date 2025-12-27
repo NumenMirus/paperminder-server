@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from typing import Generator
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import DateTime, Integer, String, Text, Boolean, LargeBinary, create_engine, ForeignKey, UniqueConstraint, Index, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker, relationship
 from passlib.context import CryptContext
@@ -79,8 +80,8 @@ class User(Base):
     # User metadata
     full_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), index=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -169,19 +170,19 @@ class Printer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     # Daily message number tracking
-    daily_message_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    daily_message_number: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     last_message_number_reset_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Firmware tracking
-    platform: Mapped[str] = mapped_column(String(32), default="esp8266", nullable=False, index=True)
-    firmware_version: Mapped[str] = mapped_column(String(16), default="0.0.0", nullable=False)
-    auto_update: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    update_channel: Mapped[str] = mapped_column(String(16), default="stable", nullable=False)
+    platform: Mapped[str] = mapped_column(String(32), default="esp8266", server_default=text("esp8266"), nullable=False, index=True)
+    firmware_version: Mapped[str] = mapped_column(String(16), default="0.0.0", server_default=text("0.0.0"), nullable=False)
+    auto_update: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    update_channel: Mapped[str] = mapped_column(String(16), default="stable", server_default=text("stable"), nullable=False)
 
     # Connection tracking
     last_connected: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    online: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
 
     # Relationships
     owner: Mapped[User] = relationship("User", foreign_keys=[user_uuid], backref="owned_printers")
@@ -199,7 +200,7 @@ class MessageCache(Base):
     sender_name: Mapped[str] = mapped_column(String(128), nullable=False)
     message_body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    is_delivered: Mapped[bool] = mapped_column(default=False, index=True)
+    is_delivered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), index=True)
 
 
 class FirmwareVersion(Base):
@@ -224,7 +225,7 @@ class FirmwareVersion(Base):
     # Release info
     release_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     changelog: Mapped[str | None] = mapped_column(Text, nullable=True)
-    mandatory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    mandatory: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     min_upgrade_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # Availability
@@ -232,9 +233,9 @@ class FirmwareVersion(Base):
     deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Statistics
-    download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    download_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
 
 
 class UpdateRollout(Base):
@@ -245,28 +246,28 @@ class UpdateRollout(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     firmware_version: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # Version string (platform-agnostic)
 
-    # Targeting (stored as JSON strings for SQLite compatibility)
-    target_all: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    target_user_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of user IDs
-    target_printer_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of printer IDs
-    target_channels: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of channels
+    # Targeting (stored as JSONB for PostgreSQL)
+    target_all: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    target_user_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # JSONB array of user IDs
+    target_printer_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # JSONB array of printer IDs
+    target_channels: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # JSONB array of channels
     min_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     max_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # Rollout strategy
     rollout_type: Mapped[str] = mapped_column(String(32), nullable=False)  # immediate, gradual, scheduled
-    rollout_percentage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # For gradual rollouts (0-100)
+    rollout_percentage: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)  # For gradual rollouts (0-100)
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Status
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)  # pending, active, paused, completed, cancelled
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", server_default=text("pending"), index=True)  # pending, active, paused, completed, cancelled
 
     # Progress tracking
-    total_targets: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    completed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    declined_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    pending_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_targets: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    declined_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
@@ -280,6 +281,9 @@ class UpdateHistory(Base):
     """ORM model tracking individual firmware update attempts."""
 
     __tablename__ = "update_history"
+    __table_args__ = (
+        Index('ix_update_history_printer_status', 'printer_id', 'status'),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rollout_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("update_rollouts.id"), nullable=True, index=True)
@@ -295,7 +299,7 @@ class UpdateHistory(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Progress
-    last_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_percent: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     last_status_message: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # Relationships
@@ -325,8 +329,22 @@ def configure_database(database_url: str | None = None) -> None:
     if _engine is not None:
         _engine.dispose()
 
+    # SQLite-specific configuration
     connect_args = {"check_same_thread": False} if resolved_url.startswith("sqlite") else {}
-    _engine = create_engine(resolved_url, connect_args=connect_args, future=True)
+
+    # PostgreSQL connection pooling
+    if resolved_url.startswith("postgresql"):
+        _engine = create_engine(
+            resolved_url,
+            connect_args=connect_args,
+            future=True,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+        )
+    else:
+        _engine = create_engine(resolved_url, connect_args=connect_args, future=True)
+
     _SessionLocal = sessionmaker(
         bind=_engine,
         autocommit=False,
