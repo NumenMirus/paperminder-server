@@ -45,7 +45,6 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
     try:
         while True:
             raw_payload = await websocket.receive_text()
-            logger.debug(f"Received raw payload from user_id={user_key}: {raw_payload[:200]}")
 
             try:
                 payload = json.loads(raw_payload)
@@ -63,19 +62,15 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                 )
                 continue
 
+            # Skip logging ping/pong keep-alive messages
+            message_kind = payload.get("kind")
+            if message_kind not in ["ping", "pong"]:
+                logger.debug(f"Received from user_id={user_key}: {raw_payload}")
+
             # Handle printer subscription
             if {"printer_name", "api_key"}.issubset(payload):
-                logger.debug(f"Processing printer subscription from user_id={user_key}")
                 try:
                     subscription = SubscriptionRequest.model_validate(payload)
-                    logger.debug(
-                        f"Printer subscription: name={subscription.printer_name}, "
-                        f"api_key={subscription.api_key[:8]}..., "
-                        f"platform={subscription.platform}, "
-                        f"firmware_version={subscription.firmware_version}, "
-                        f"auto_update={subscription.auto_update}, "
-                        f"update_channel={subscription.update_channel}"
-                    )
                 except ValidationError as exc:
                     await connection_manager.notify(
                         websocket,
@@ -95,21 +90,13 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
 
             # Handle firmware update messages from printers
             if payload.get("kind") in ["firmware_declined", "firmware_progress", "firmware_complete", "firmware_failed"]:
-                message_kind = payload.get("kind")
-                logger.debug(f"Processing firmware message kind={message_kind} from printer {user_key}")
                 await _handle_firmware_message(user_key, payload)
                 continue
 
             # Handle regular messages
-            logger.debug(f"Processing regular message from user_id={user_key}")
             try:
                 message = InboundMessage.model_validate(payload)
                 recipient_id_str = str(message.recipient_id)
-                logger.debug(
-                    f"Message validated: recipient_id={recipient_id_str[:8]}..., "
-                    f"sender_name={message.sender_name}, "
-                    f"message_length={len(message.message)}"
-                )
             except ValidationError as exc:
                 await connection_manager.notify(
                     websocket,
@@ -119,9 +106,7 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
 
             try:
                 await connection_manager.send_personal_message(sender_id=user_key, message=message)
-                logger.debug(f"Message sent from {user_key} to {recipient_id_str[:8]}...")
             except RecipientNotConnectedError:
-                logger.debug(f"Message from {user_key} failed: recipient {recipient_id_str[:8]}... not connected")
                 await connection_manager.notify(
                     websocket,
                     StatusMessage(
@@ -153,10 +138,6 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
     try:
         if message_kind == "firmware_declined":
             message = FirmwareDeclinedMessage.model_validate(payload)
-            logger.debug(
-                f"Firmware declined: printer={printer_uuid[:8]}..., "
-                f"version={message.version}, auto_update={message.auto_update}"
-            )
             await connection_manager.handle_firmware_declined(
                 printer_uuid=printer_uuid,
                 version=message.version,
@@ -165,10 +146,6 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
 
         elif message_kind == "firmware_progress":
             message = FirmwareProgressMessage.model_validate(payload)
-            logger.debug(
-                f"Firmware progress: printer={printer_uuid[:8]}..., "
-                f"percent={message.percent}%, status={message.status}"
-            )
             await connection_manager.handle_firmware_progress(
                 printer_uuid=printer_uuid,
                 percent=message.percent,
@@ -177,9 +154,6 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
 
         elif message_kind == "firmware_complete":
             message = FirmwareCompleteMessage.model_validate(payload)
-            logger.debug(
-                f"Firmware complete: printer={printer_uuid[:8]}..., version={message.version}"
-            )
             await connection_manager.handle_firmware_complete(
                 printer_uuid=printer_uuid,
                 version=message.version,
@@ -187,9 +161,6 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
 
         elif message_kind == "firmware_failed":
             message = FirmwareFailedMessage.model_validate(payload)
-            logger.debug(
-                f"Firmware failed: printer={printer_uuid[:8]}..., error={message.error}"
-            )
             await connection_manager.handle_firmware_failed(
                 printer_uuid=printer_uuid,
                 error_message=message.error,
