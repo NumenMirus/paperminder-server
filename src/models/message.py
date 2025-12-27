@@ -68,6 +68,7 @@ class SubscriptionRequest(BaseModel):
     printer_name: str = Field(..., min_length=1, description="Human readable printer identifier")
     printer_id: str = Field(..., min_length=1, description="Printer UUID (used to identify printer in database)")
     api_key: str | None = Field(None, description="API key for future authentication (optional)")
+    user_id: UUID | None = Field(None, description="Owning user UUID (optional)")
     # Firmware tracking fields
     platform: str = Field(..., min_length=1, description="Printer hardware platform (e.g., esp8266, esp32) - REQUIRED for correct firmware updates")
     firmware_version: str | None = Field(None, description="Current firmware version on printer")

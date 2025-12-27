@@ -48,9 +48,13 @@ class ConnectionManager:
             self._subscriptions[id(websocket)] = subscription
 
         # Update printer firmware and connection info
+        printer_uuid = str(subscription.printer_id).strip()
+        user_uuid = str(subscription.user_id).strip() if subscription.user_id is not None else None
         await asyncio.to_thread(
             UpdateService.update_printer_subscription_info,
-            printer_uuid=str(subscription.printer_id),  # printer_id is the printer UUID
+            printer_uuid=printer_uuid,  # printer_id is the printer UUID
+            printer_name=subscription.printer_name,
+            user_uuid=user_uuid,
             firmware_version=subscription.firmware_version,
             platform=subscription.platform,
             auto_update=subscription.auto_update,

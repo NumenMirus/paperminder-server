@@ -1043,6 +1043,55 @@ def update_printer_connection_status(
         return True
 
 
+def update_printer_identity_info(
+    uuid: str,
+    name: str | None = None,
+    user_uuid: str | None = None,
+) -> bool:
+    """Update printer identity information.
+
+    This is intended for fields sent in the WS subscribe payload.
+
+    Args:
+        uuid: The UUID of the printer
+        name: Optional printer name
+        user_uuid: Optional owning user UUID (must exist)
+
+    Returns:
+        True if the printer exists (and any valid updates were applied), False if printer not found
+    """
+    with session_scope() as session:
+        printer = session.query(Printer).filter_by(uuid=uuid).first()
+        if printer is None:
+            logger.warning(
+                f"Failed to update identity info for printer {uuid}: Printer not found in database"
+            )
+            return False
+
+        if name is not None and name.strip():
+            new_name = name.strip()
+            if printer.name != new_name:
+                old_name = printer.name
+                printer.name = new_name
+                logger.info(f"Printer {uuid} name: {old_name} -> {new_name}")
+
+        if user_uuid is not None and user_uuid.strip():
+            normalized_user_uuid = user_uuid.strip()
+            if printer.user_uuid != normalized_user_uuid:
+                # Validate user exists to avoid FK violations
+                user = session.query(User).filter_by(uuid=normalized_user_uuid).first()
+                if user is None:
+                    logger.warning(
+                        f"Ignoring subscribe user_uuid update for printer {uuid}: user {normalized_user_uuid} not found"
+                    )
+                else:
+                    old_user_uuid = printer.user_uuid
+                    printer.user_uuid = normalized_user_uuid
+                    logger.info(f"Printer {uuid} user_uuid: {old_user_uuid} -> {normalized_user_uuid}")
+
+        return True
+
+
 def get_printers_by_filters(
     user_uuid: str | None = None,
     online: bool | None = None,

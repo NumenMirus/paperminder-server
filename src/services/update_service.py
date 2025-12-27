@@ -305,6 +305,8 @@ class UpdateService:
     @staticmethod
     def update_printer_subscription_info(
         printer_uuid: str,
+        printer_name: str | None = None,
+        user_uuid: str | None = None,
         firmware_version: str | None = None,
         platform: str | None = None,
         auto_update: bool | None = None,
@@ -328,9 +330,21 @@ class UpdateService:
         """
         logger.info(
             f"Updating printer {printer_uuid} subscription info: "
+            f"name={printer_name}, user_uuid={user_uuid}, "
             f"fw_ver={firmware_version}, platform={platform}, auto_update={auto_update}, "
             f"channel={update_channel}, online={online}, last_ip={last_ip}"
         )
+
+        # Update identity fields first (best-effort)
+        try:
+            from src.crud import update_printer_identity_info
+            update_printer_identity_info(
+                uuid=printer_uuid,
+                name=printer_name,
+                user_uuid=user_uuid,
+            )
+        except Exception:
+            logger.exception(f"Failed to update identity info for printer {printer_uuid}")
         
         # Update firmware info first (this may fail if printer not found)
         success = update_printer_firmware_info(

@@ -101,12 +101,22 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                     ),
                 )
     except WebSocketDisconnect:
+        subscription = connection_manager.subscription_for(websocket)
         await connection_manager.disconnect(user_key, websocket)
-        # Update printer status to offline when disconnected
+
+        # Update printer status to offline when disconnected.
+        # Prefer the subscribed printer_id (works even if /ws/{user_id} is the owner UUID).
+        printer_uuid = None
+        if subscription is not None:
+            printer_uuid = str(subscription.printer_id).strip()
+        else:
+            # Fallback: some clients may connect using the printer UUID as the path param
+            printer_uuid = user_key
+
         import asyncio
         await asyncio.to_thread(
             update_printer_connection_status,
-            uuid=user_key,
+            uuid=printer_uuid,
             online=False,
         )
 
