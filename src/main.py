@@ -11,9 +11,12 @@ from src.views import (
     firmware_router,
 )
 
-from src.config import auth
+from src.config import auth, configure_logging
 
 def create_app(*, database_url: str | None = None) -> FastAPI:
+    # Configure logging first
+    configure_logging()
+
     # Initialize database connection on startup
     # Tables are created by migrations, not by init_db
     from src.database import configure_database

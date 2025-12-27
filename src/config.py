@@ -1,5 +1,7 @@
 from authx import AuthX, AuthXConfig
 from pydantic_settings import BaseSettings
+import logging
+import os
 
 
 class Settings(BaseSettings):
@@ -9,9 +11,19 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
     max_firmware_size: int = 5 * 1024 * 1024  # 5MB
 
+    # Logging configuration
+    log_level: str = "INFO"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
+
+        # Allow both LOG_LEVEL and LOGLEVEL (common in docker-compose)
+        fields = {
+            'log_level': {
+                'env_names': ['LOG_LEVEL', 'LOGLEVEL'],
+            }
+        }
 
 
 auth_config = AuthXConfig(
@@ -37,6 +49,25 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+def configure_logging() -> None:
+    """Configure application logging based on settings."""
+    settings = get_settings()
+
+    # Convert string level to logging constant
+    numeric_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=numeric_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Configure specific loggers
+    for logger_name in ['uvicorn', 'uvicorn.access', 'uvicorn.error']:
+        logging.getLogger(logger_name).setLevel(numeric_level)
 
 
 # ============================================================================
