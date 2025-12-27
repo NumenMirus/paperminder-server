@@ -47,9 +47,9 @@ def get_settings() -> Settings:
 SUPPORTED_PLATFORMS = [
     "esp8266",  # Original ESP8266 series
     "esp32",    # Original ESP32 dual-core
-    "esp32s2",  # ESP32-S2 single-core with USB-OTG
-    "esp32s3",  # ESP32-S3 dual-core with AI acceleration
-    "esp32c3",  # ESP32-C3 low-cost RISC-V
+    "esp32-s2",  # ESP32-S2 single-core with USB-OTG
+    "esp32-s3",  # ESP32-S3 dual-core with AI acceleration
+    "esp32-c3",  # ESP32-C3 low-cost RISC-V
 ]
 
 # Default platform for backward compatibility
@@ -65,4 +65,9 @@ def is_platform_supported(platform: str) -> bool:
     Returns:
         True if platform is supported, False otherwise
     """
-    return platform in SUPPORTED_PLATFORMS
+    from src.utils.platform import normalize_platform
+
+    normalized = normalize_platform(platform)
+    if normalized is None:
+        return False
+    return normalized in SUPPORTED_PLATFORMS

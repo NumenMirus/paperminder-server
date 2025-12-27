@@ -201,11 +201,14 @@ class RolloutService:
                             continue
 
                         # Create platform-specific firmware update message
+                        from src.utils.platform import normalize_platform
+
+                        normalized_platform = normalize_platform(firmware.platform) or firmware.platform
                         update_message = {
                             "kind": "firmware_update",
                             "version": firmware.version,
-                            "platform": firmware.platform,
-                            "url": f"{base_url}/api/firmware/download/{firmware.platform}/{firmware.version}",
+                            "platform": normalized_platform,
+                            "url": f"{base_url}/api/firmware/download/{normalized_platform}/{firmware.version}",
                             "md5": firmware.md5_checksum
                         }
 

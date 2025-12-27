@@ -69,14 +69,20 @@ class FirmwareService:
         Raises:
             ValueError: If version already exists or validation fails
         """
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(platform)
+        if not normalized_platform:
+            raise ValueError("Platform is required")
+
         # Validate platform
-        if not is_platform_supported(platform):
+        if not is_platform_supported(normalized_platform):
             raise ValueError(f"Unsupported platform: {platform}")
 
         # Check if version already exists for this platform
-        existing = get_firmware_version(version, platform)
+        existing = get_firmware_version(version, normalized_platform)
         if existing:
-            raise ValueError(f"Firmware version {version} already exists for platform {platform}")
+            raise ValueError(f"Firmware version {version} already exists for platform {normalized_platform}")
 
         # Validate semantic version format
         if not FirmwareService._is_valid_version(version):
@@ -92,7 +98,7 @@ class FirmwareService:
         # Create firmware version in database
         firmware = create_firmware_version(
             version=version,
-            platform=platform,
+            platform=normalized_platform,
             channel=channel,
             file_data=file_data,
             file_size=len(file_data),
@@ -117,7 +123,10 @@ class FirmwareService:
         Returns:
             The FirmwareVersion object or None if not found
         """
-        return get_firmware_version(version, platform)
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(platform) or platform
+        return get_firmware_version(version, normalized_platform)
 
     @staticmethod
     def get_firmware_by_id(firmware_id: int) -> FirmwareVersion | None:
@@ -142,7 +151,10 @@ class FirmwareService:
         Returns:
             The latest FirmwareVersion object or None if not found
         """
-        return get_latest_firmware(channel, platform)
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(platform) or platform
+        return get_latest_firmware(channel, normalized_platform)
 
     @staticmethod
     def list_firmware(channel: str | None = None, platform: str | None = None) -> list[FirmwareVersion]:
@@ -155,7 +167,10 @@ class FirmwareService:
         Returns:
             List of FirmwareVersion objects
         """
-        return get_all_firmware_versions(channel, platform)
+        from src.utils.platform import normalize_platform
+
+        normalized_platform = normalize_platform(platform) if platform is not None else None
+        return get_all_firmware_versions(channel, normalized_platform)
 
     @staticmethod
     def is_update_available(

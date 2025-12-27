@@ -947,6 +947,9 @@ def update_printer_firmware_info(
     Returns:
         True if the printer was updated, False if not found
     """
+    from src.utils.platform import normalize_platform
+
+    normalized_platform = normalize_platform(platform) if platform is not None else None
     with session_scope() as session:
         printer = session.query(Printer).filter_by(uuid=uuid).first()
         if printer is None:
@@ -964,14 +967,14 @@ def update_printer_firmware_info(
                 logger.info(f"Printer {uuid} firmware version: {old_version} -> {firmware_version}")
                 updated = True
 
-        if platform is not None:
+        if normalized_platform is not None:
             old_platform = printer.platform
-            printer.platform = platform
-            if old_platform != platform:
-                logger.info(f"Printer {uuid} platform: {old_platform} -> {platform}")
+            printer.platform = normalized_platform
+            if old_platform != normalized_platform:
+                logger.info(f"Printer {uuid} platform: {old_platform} -> {normalized_platform}")
                 updated = True
             else:
-                logger.debug(f"Printer {uuid} platform already set to: {platform}")
+                logger.debug(f"Printer {uuid} platform already set to: {normalized_platform}")
 
         if auto_update is not None:
             old_auto_update = printer.auto_update
@@ -989,8 +992,8 @@ def update_printer_firmware_info(
 
         if updated:
             logger.debug(f"Printer {uuid} firmware info updated successfully")
-        elif any([firmware_version is not None, platform is not None, auto_update is not None, update_channel is not None]):
-            logger.debug(f"Printer {uuid} firmware info values already current: fw_ver={firmware_version}, platform={platform}, auto_update={auto_update}, channel={update_channel}")
+        elif any([firmware_version is not None, normalized_platform is not None, auto_update is not None, update_channel is not None]):
+            logger.debug(f"Printer {uuid} firmware info values already current: fw_ver={firmware_version}, platform={normalized_platform}, auto_update={auto_update}, channel={update_channel}")
 
         return True
 
@@ -1205,8 +1208,19 @@ def get_firmware_version(version: str, platform: str) -> FirmwareVersion | None:
     Returns:
         The FirmwareVersion object or None if not found
     """
+    from src.utils.platform import platform_variants
+
+    variants = platform_variants(platform)
     with session_scope() as session:
-        firmware = session.query(FirmwareVersion).filter_by(version=version, platform=platform).first()
+        if variants:
+            firmware = (
+                session.query(FirmwareVersion)
+                .filter(FirmwareVersion.version == version)
+                .filter(FirmwareVersion.platform.in_(variants))
+                .first()
+            )
+        else:
+            firmware = session.query(FirmwareVersion).filter_by(version=version, platform=platform).first()
         return firmware
 
 
@@ -1234,10 +1248,14 @@ def get_latest_firmware(channel: str = "stable", platform: str = "esp8266") -> F
     Returns:
         The latest FirmwareVersion object or None if not found
     """
+    from src.utils.platform import platform_variants
+
+    variants = platform_variants(platform)
     with session_scope() as session:
         firmware = (
             session.query(FirmwareVersion)
-            .filter_by(channel=channel, platform=platform)
+            .filter(FirmwareVersion.channel == channel)
+            .filter(FirmwareVersion.platform.in_(variants) if variants else FirmwareVersion.platform == platform)
             .filter(FirmwareVersion.deprecated_at.is_(None))
             .order_by(FirmwareVersion.released_at.desc())
             .first()
@@ -1255,12 +1273,18 @@ def get_all_firmware_versions(channel: str | None = None, platform: str | None =
     Returns:
         List of FirmwareVersion objects
     """
+    from src.utils.platform import platform_variants
+
     with session_scope() as session:
         query = session.query(FirmwareVersion)
         if channel is not None:
             query = query.filter_by(channel=channel)
         if platform is not None:
-            query = query.filter_by(platform=platform)
+            variants = platform_variants(platform)
+            if variants:
+                query = query.filter(FirmwareVersion.platform.in_(variants))
+            else:
+                query = query.filter_by(platform=platform)
         firmware = query.order_by(FirmwareVersion.released_at.desc()).all()
         return firmware
 
