@@ -55,7 +55,7 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
                 continue
 
             # Handle printer subscription
-            if {"printer_name", "api_key"}.issubset(payload):
+            if {"printer_name", "printer_id"}.issubset(payload):
                 try:
                     subscription = SubscriptionRequest.model_validate(payload)
                 except ValidationError as exc:

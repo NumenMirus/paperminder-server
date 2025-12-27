@@ -50,7 +50,7 @@ class ConnectionManager:
         # Update printer firmware and connection info
         await asyncio.to_thread(
             UpdateService.update_printer_subscription_info,
-            printer_uuid=str(subscription.api_key),  # api_key is used as printer UUID
+            printer_uuid=str(subscription.printer_id),  # printer_id is the printer UUID
             firmware_version=subscription.firmware_version,
             platform=subscription.platform,
             auto_update=subscription.auto_update,
@@ -65,7 +65,7 @@ class ConnectionManager:
     async def _check_and_push_update(self, websocket: WebSocket, subscription: SubscriptionRequest) -> None:
         """Check for firmware updates and push to printer if available."""
         try:
-            printer_uuid = str(subscription.api_key)  # api_key is used as printer UUID
+            printer_uuid = str(subscription.printer_id)  # printer_id is the printer UUID
             firmware = await asyncio.to_thread(
                 UpdateService.check_for_updates,
                 printer_uuid,
