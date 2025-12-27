@@ -45,8 +45,12 @@ class MessageRequest(BaseModel):
     recipient_id: UUID = Field(
         ..., description="Identifier of the printer/user who should receive the test message"
     )
-    sender_uuid: UUID = Field(
-        ..., description="UUID of the user sending the message (must be printer owner or in same group)"
+    sender_uuid: UUID | str | None = Field(
+        default=None,
+        description=(
+            "Deprecated/ignored. The sender is derived from the authenticated JWT (token.sub). "
+            "Present only for backwards compatibility with older clients."
+        ),
     )
     sender_name: str = Field(
         default="system",

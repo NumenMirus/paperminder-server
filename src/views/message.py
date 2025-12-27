@@ -1,19 +1,21 @@
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status, Response
 from src.controllers.message_controller import connection_manager
+from src.dependencies import CurrentUser
 from src.exceptions import RecipientNotConnectedError, RecipientNotFoundError
 from src.models.message import (
     InboundMessage,
     MessageRequest,
 )
 from src.crud import can_user_message_printer
+from src.crud import get_user
 
 
 router = APIRouter(prefix="/api", tags=["message"])
 
 
 @router.post("/message")
-async def send_message(payload: MessageRequest, response: Response) -> dict[str, str]:
+async def send_message(payload: MessageRequest, response: Response, current_user: CurrentUser) -> dict[str, str]:
     """HTTP endpoint to deliver a message to a connected websocket client.
 
     Permission check: Only the printer owner or users in the same group can send messages to the printer.
@@ -24,6 +26,22 @@ async def send_message(payload: MessageRequest, response: Response) -> dict[str,
     - 404: Recipient does not exist
     - 500: Internal server error
     """
+
+    # Derive sender identity from the authenticated token. Do not trust the client payload.
+    sender_sub = getattr(current_user, "sub", None)
+    if not sender_sub:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing subject claim",
+        )
+    sender_uuid = str(sender_sub)
+
+    # Defensive check: ensure sender exists to avoid FK violations in message_logs.
+    if not get_user(uuid=sender_uuid):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
 
     # Check if the sender has permission to send messages to this printer
     # if not can_user_message_printer(str(payload.sender_uuid), str(payload.recipient_id)):
@@ -40,7 +58,7 @@ async def send_message(payload: MessageRequest, response: Response) -> dict[str,
     )
 
     try:
-        await connection_manager.send_personal_message(sender_id=str(payload.sender_uuid), message=inbound)
+        await connection_manager.send_personal_message(sender_id=sender_uuid, message=inbound)
         # Message was successfully sent to connected recipient
         return {"status": "sent"}
 
