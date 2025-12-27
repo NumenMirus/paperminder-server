@@ -970,10 +970,15 @@ def update_printer_firmware_info(
             if old_platform != platform:
                 logger.info(f"Printer {uuid} platform: {old_platform} -> {platform}")
                 updated = True
+            else:
+                logger.debug(f"Printer {uuid} platform already set to: {platform}")
 
         if auto_update is not None:
+            old_auto_update = printer.auto_update
             printer.auto_update = auto_update
-            updated = True
+            if old_auto_update != auto_update:
+                logger.info(f"Printer {uuid} auto_update: {old_auto_update} -> {auto_update}")
+                updated = True
 
         if update_channel is not None:
             old_channel = printer.update_channel
@@ -984,6 +989,8 @@ def update_printer_firmware_info(
 
         if updated:
             logger.debug(f"Printer {uuid} firmware info updated successfully")
+        elif any([firmware_version is not None, platform is not None, auto_update is not None, update_channel is not None]):
+            logger.debug(f"Printer {uuid} firmware info values already current: fw_ver={firmware_version}, platform={platform}, auto_update={auto_update}, channel={update_channel}")
 
         return True
 
@@ -1026,6 +1033,11 @@ def update_printer_connection_status(
         if old_online != online:
             logger.info(
                 f"Printer {uuid} connection status changed: {old_online} -> {online}"
+            )
+        else:
+            logger.debug(
+                f"Printer {uuid} connection status set to: {online} "
+                f"(last_ip={last_ip}, last_connected={printer.last_connected})"
             )
 
         return True

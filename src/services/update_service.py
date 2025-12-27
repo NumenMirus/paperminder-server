@@ -326,6 +326,12 @@ class UpdateService:
         Returns:
             True if updated, False if printer not found
         """
+        logger.info(
+            f"Updating printer {printer_uuid} subscription info: "
+            f"fw_ver={firmware_version}, platform={platform}, auto_update={auto_update}, "
+            f"channel={update_channel}, online={online}, last_ip={last_ip}"
+        )
+        
         # Update firmware info first (this may fail if printer not found)
         success = update_printer_firmware_info(
             uuid=printer_uuid,
