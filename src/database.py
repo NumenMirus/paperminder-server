@@ -25,7 +25,6 @@ _password_context = CryptContext(
     argon2__parallelism=4,
 )
 
-_DEFAULT_DATABASE_URL = "sqlite:///./paperminder.db"
 _DATABASE_URL_ENV = "DATABASE_URL"
 
 
@@ -314,7 +313,14 @@ _configured_url: str | None = None
 def _resolve_database_url(database_url: str | None = None) -> str:
     if database_url:
         return database_url
-    return os.getenv(_DATABASE_URL_ENV, _DEFAULT_DATABASE_URL)
+
+    url = os.getenv(_DATABASE_URL_ENV)
+    if not url:
+        raise RuntimeError(
+            f"DATABASE_URL environment variable is required but not set. "
+            f"Please set it to a valid PostgreSQL connection string."
+        )
+    return url
 
 
 def configure_database(database_url: str | None = None) -> None:
@@ -329,21 +335,14 @@ def configure_database(database_url: str | None = None) -> None:
     if _engine is not None:
         _engine.dispose()
 
-    # SQLite-specific configuration
-    connect_args = {"check_same_thread": False} if resolved_url.startswith("sqlite") else {}
-
     # PostgreSQL connection pooling
-    if resolved_url.startswith("postgresql"):
-        _engine = create_engine(
-            resolved_url,
-            connect_args=connect_args,
-            future=True,
-            pool_size=10,
-            max_overflow=20,
-            pool_pre_ping=True,
-        )
-    else:
-        _engine = create_engine(resolved_url, connect_args=connect_args, future=True)
+    _engine = create_engine(
+        resolved_url,
+        future=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+    )
 
     _SessionLocal = sessionmaker(
         bind=_engine,

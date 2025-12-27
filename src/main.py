@@ -2,7 +2,6 @@ from __future__ import annotations
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.database import init_db
 from src.views import (
     auth_router,
     health_router,
@@ -15,11 +14,14 @@ from src.views import (
 from src.config import auth
 
 def create_app(*, database_url: str | None = None) -> FastAPI:
-    #init_db(database_url)
+    # Initialize database connection on startup
+    # Tables are created by migrations, not by init_db
+    from src.database import configure_database
+    configure_database(database_url)
 
     app = FastAPI(
         title="PaperMinder Messaging Service",
-        version="0.8.0",
+        version="1.1.0",
         description="PaperMinder FastAPI application exposing websocket endpoints for personal messaging and firmware updates.",
     )
 

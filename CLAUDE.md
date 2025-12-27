@@ -103,7 +103,7 @@ DATABASE_URL="..." uv run alembic show <revision_id>
 - For JSONB columns, use `postgresql.JSONB()` type
 - Boolean defaults use lowercase text: `server_default=sa.text("true")` or `sa.text("false")`
 - Integer defaults don't need quotes: `server_default=sa.text("0")`
-- The migration system automatically handles both SQLite and PostgreSQL via `DATABASE_URL` prefix
+- PostgreSQL is the only supported database engine
 
 
 ## Architecture Overview
