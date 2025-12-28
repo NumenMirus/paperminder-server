@@ -328,6 +328,7 @@ async def create_rollout(
     try:
         rollout = await RolloutService.create_rollout(
             firmware_version=payload.firmware_version,
+            channel=payload.channel,
             target_all=payload.target.all,
             target_user_ids=[str(uid) for uid in payload.target.user_ids] if payload.target.user_ids else None,
             target_printer_ids=[str(pid) for pid in payload.target.printer_ids] if payload.target.printer_ids else None,

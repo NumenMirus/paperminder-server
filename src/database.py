@@ -244,6 +244,7 @@ class UpdateRollout(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     firmware_version: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # Version string (platform-agnostic)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False, default="stable", server_default=text("'stable'"))  # Firmware channel (stable, beta, canary)
 
     # Targeting (stored as JSONB for PostgreSQL)
     target_all: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)

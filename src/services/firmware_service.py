@@ -113,12 +113,13 @@ class FirmwareService:
         return firmware
 
     @staticmethod
-    def get_firmware(version: str, platform: str) -> FirmwareVersion | None:
-        """Retrieve firmware by version string and platform.
+    def get_firmware(version: str, platform: str, channel: str | None = None) -> FirmwareVersion | None:
+        """Retrieve firmware by version string, platform, and optionally channel.
 
         Args:
             version: The version string
             platform: The platform string
+            channel: Optional channel to filter by (stable, beta, canary)
 
         Returns:
             The FirmwareVersion object or None if not found
@@ -126,7 +127,7 @@ class FirmwareService:
         from src.utils.platform import normalize_platform
 
         normalized_platform = normalize_platform(platform) or platform
-        return get_firmware_version(version, normalized_platform)
+        return get_firmware_version(version, normalized_platform, channel)
 
     @staticmethod
     def get_firmware_by_id(firmware_id: int) -> FirmwareVersion | None:

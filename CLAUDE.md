@@ -197,13 +197,20 @@ Printers connect via WebSocket and immediately send a `SubscriptionRequest` mess
 {
   "kind": "subscription",
   "printer_name": "My Printer",
-  "api_key": "printer-uuid-here",
+  "printer_id": "printer-uuid-here",
+  "platform": "esp32-c3",
   "firmware_version": "1.2.0",
   "auto_update": true,
   "update_channel": "stable"
 }
 ```
 The server updates the printer's online status and firmware version, then checks for available firmware updates.
+
+**Important notes:**
+- `printer_id` is the printer's UUID (used to identify printer in database)
+- `platform` field is REQUIRED for correct firmware updates (e.g., esp8266, esp32, esp32-c3, esp32-s3)
+- Platform strings are normalized to dashed format (esp32-c3, esp32-s3) but accept variants (esp32c3, esp32_s3)
+- Firmware is stored per-platform, so the same version number can have different binaries for different platforms
 
 **4. Gradual Rollout Hashing**
 Gradual rollouts use consistent MD5 hashing to assign printers to buckets 0-99:
@@ -223,11 +230,11 @@ Each printer tracks `daily_message_number` that resets daily. Messages include a
 **Important Tables:**
 - **Users**: UUID-based identification, `is_admin` flag for authorization
 - **Groups**: User-created groups for organizing printers (many-to-many with users and printers)
-- **Printers**: Device registry with firmware version, auto_update preference, update_channel, online status, daily_message_number
-- **MessageLog**: Historical record of all delivered messages
+- **Printers**: Device registry with platform, firmware version, auto_update preference, update_channel, online status, daily_message_number
+- **MessageLog**: Historical record of all delivered messages (recipient references printer UUID)
 - **MessageCache**: Temporary storage for offline recipients (delivered on reconnect via `is_delivered` flag)
-- **FirmwareVersion**: Firmware binaries stored as BLOB with MD5/SHA256 checksums, platform-specific, mandatory flag
-- **UpdateRollout**: Campaign configuration with JSONB targeting fields (target_user_ids, target_printer_ids, target_channels)
+- **FirmwareVersion**: Firmware binaries stored as BLOB with MD5/SHA256 checksums, **platform-specific** (unique constraint on version + platform), mandatory flag
+- **UpdateRollout**: Campaign configuration with JSONB targeting fields (target_user_ids, target_printer_ids, target_channels) - platform-agnostic version strings only
 - **UpdateHistory**: Individual update attempts with progress tracking (status: pending/downloading/completed/failed/declined)
 
 **Key Relationships:**
@@ -261,13 +268,15 @@ Each printer tracks `daily_message_number` that resets daily. Messages include a
 6. Message is logged to `MessageLog` for history
 
 ### Firmware Update Flow
-1. Printer connects and sends `SubscriptionRequest` with firmware version
-2. Connection manager updates printer's firmware_version, auto_update, update_channel, online status
+1. Printer connects and sends `SubscriptionRequest` with platform and firmware version
+2. Connection manager normalizes platform string, updates printer's firmware_version, auto_update, update_channel, online status
 3. If `auto_update=true`, server checks for active rollouts targeting this printer
-4. If rollout eligible, push `FirmwareUpdateMessage` with download URL
+4. If rollout eligible, server finds firmware for printer's platform and pushes `FirmwareUpdateMessage` with download URL
 5. Printer downloads and reports progress via `FirmwareProgressMessage`
 6. On completion: `FirmwareCompleteMessage` or `FirmwareFailedMessage`
 7. Server updates `UpdateHistory` and `UpdateRollout` counters
+
+**Important:** Each printer receives firmware for its specific platform. A rollout for version "1.5.0" will deliver different firmware binaries to esp8266 vs esp32-c3 printers.
 
 ### Dependency Injection for Authorization
 ```python
@@ -304,7 +313,23 @@ async def admin_endpoint(admin_user: AdminUser):
 
 ## Common Gotchas
 
-**1. Forgetting `server_default` in Models**
+**1. Platform Normalization**
+Platform strings must be normalized consistently when querying or storing:
+```python
+from src.utils.platform import normalize_platform, platform_variants
+
+# Normalize input to canonical form
+platform = normalize_platform("esp32c3")  # Returns "esp32-c3"
+
+# Query firmware - check all variants
+variants = platform_variants("esp32-c3")  # Returns ["esp32-c3", "esp32c3", "esp32_c3"]
+firmware = session.query(FirmwareVersion).filter(
+    FirmwareVersion.platform.in_(variants)
+).first()
+```
+When uploading firmware, always normalize the platform field. When querying for firmware matching a printer's platform, use `platform_variants()` to handle legacy formats.
+
+**2. Forgetting `server_default` in Models**
 When adding new fields to models in `src/database.py`, always add `server_default=text(...)`, not just `default=...`:
 ```python
 # WRONG
@@ -314,7 +339,7 @@ is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 ```
 
-**2. Manual JSON Serialization/Deserialization**
+**3. Manual JSON Serialization/Deserialization**
 Don't manually call `json.dumps()` or `json.loads()` on JSONB columns. SQLAlchemy handles it:
 ```python
 # WRONG
@@ -324,7 +349,7 @@ rollout.target_user_ids = json.dumps(["uuid1", "uuid2"])
 rollout.target_user_ids = ["uuid1", "uuid2"]
 ```
 
-**3. Forgetting `asyncio.to_thread()` in Async Context**
+**4. Forgetting `asyncio.to_thread()` in Async Context**
 All CRUD functions in `src/crud.py` are synchronous. When calling from async endpoints, wrap them:
 ```python
 # WRONG
@@ -334,7 +359,7 @@ user = get_user(uuid=user_uuid)
 user = await asyncio.to_thread(get_user, uuid=user_uuid)
 ```
 
-**4. Unquoted String Defaults in Migrations**
+**5. Unquoted String Defaults in Migrations**
 PostgreSQL string defaults must be quoted:
 ```python
 # WRONG
@@ -344,7 +369,7 @@ server_default=sa.text("pending")
 server_default=sa.text("'pending'")
 ```
 
-**5. Not Using AdminUser Dependency**
+**6. Not Using AdminUser Dependency**
 Admin endpoints must use `AdminUser`, not `CurrentUser`:
 ```python
 # WRONG - lets any user access admin endpoint
@@ -357,3 +382,15 @@ async def upload_firmware(current_user: CurrentUser):
 async def upload_firmware(admin_user: AdminUser):
     ...
 ```
+
+**7. Printer Identification in Subscription**
+When printers send subscription messages, they must use `printer_id` (not `api_key`) for identification:
+```json
+{
+  "kind": "subscription",
+  "printer_name": "My Printer",
+  "printer_id": "printer-uuid-here",  // Correct field name
+  "platform": "esp32-c3"
+}
+```
+The `api_key` field is deprecated and ignored. Always use `printer_id` with the printer's UUID.

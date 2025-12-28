@@ -1198,12 +1198,13 @@ def create_firmware_version(
         return firmware
 
 
-def get_firmware_version(version: str, platform: str) -> FirmwareVersion | None:
-    """Retrieve a firmware version by version string and platform.
+def get_firmware_version(version: str, platform: str, channel: str | None = None) -> FirmwareVersion | None:
+    """Retrieve a firmware version by version string, platform, and optionally channel.
 
     Args:
         version: The version string
         platform: The platform string
+        channel: Optional channel to filter by (stable, beta, canary)
 
     Returns:
         The FirmwareVersion object or None if not found
@@ -1213,14 +1214,19 @@ def get_firmware_version(version: str, platform: str) -> FirmwareVersion | None:
     variants = platform_variants(platform)
     with session_scope() as session:
         if variants:
-            firmware = (
+            query = (
                 session.query(FirmwareVersion)
                 .filter(FirmwareVersion.version == version)
                 .filter(FirmwareVersion.platform.in_(variants))
-                .first()
             )
+            if channel:
+                query = query.filter(FirmwareVersion.channel == channel)
+            firmware = query.first()
         else:
-            firmware = session.query(FirmwareVersion).filter_by(version=version, platform=platform).first()
+            query = session.query(FirmwareVersion).filter_by(version=version, platform=platform)
+            if channel:
+                query = query.filter(FirmwareVersion.channel == channel)
+            firmware = query.first()
         return firmware
 
 
@@ -1343,6 +1349,7 @@ def deprecate_firmware_version(version: str) -> bool:
 
 def create_rollout(
     firmware_version: str,
+    channel: str = "stable",
     target_all: bool = False,
     target_user_ids: list[str] | None = None,
     target_printer_ids: list[str] | None = None,
@@ -1357,6 +1364,7 @@ def create_rollout(
 
     Args:
         firmware_version: The firmware version string (platform-agnostic)
+        channel: The firmware channel (stable, beta, canary)
         target_all: Whether to target all printers
         target_user_ids: Optional list of user IDs to target
         target_printer_ids: Optional list of printer IDs to target
@@ -1373,6 +1381,7 @@ def create_rollout(
     with session_scope() as session:
         rollout = UpdateRollout(
             firmware_version=firmware_version,
+            channel=channel,
             target_all=target_all,
             target_user_ids=target_user_ids,
             target_printer_ids=target_printer_ids,

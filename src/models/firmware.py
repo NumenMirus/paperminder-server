@@ -109,6 +109,7 @@ class RolloutCreateRequest(BaseModel):
     """Request model for creating a new rollout."""
 
     firmware_version: str = Field(..., min_length=1, max_length=16, description="Firmware version to deploy")
+    channel: Literal["stable", "beta", "canary"] = Field(..., description="Firmware channel to deploy")
     target: RolloutTargetSpec = Field(..., description="Targeting criteria")
     rollout_type: Literal["immediate", "gradual", "scheduled"] = Field(
         "immediate", description="Type of rollout"

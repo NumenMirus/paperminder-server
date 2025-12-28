@@ -24,12 +24,41 @@ from src.crud import (
 from src.services.firmware_service import FirmwareService
 
 
+class ChannelHierarchy:
+    """Channel hierarchy expansion for firmware rollouts.
+
+    Rollouts flow from more stable to less stable channels:
+    - stable rollouts target stable + beta + canary printers
+    - beta rollouts target beta + canary printers
+    - canary rollouts target only canary printers
+    """
+
+    CHANNEL_EXPANSION = {
+        "stable": ["stable", "beta", "canary"],
+        "beta": ["beta", "canary"],
+        "canary": ["canary"],
+    }
+
+    @staticmethod
+    def expand_channels(channel: str) -> list[str]:
+        """Expand a rollout channel to include all less stable printer channels.
+
+        Args:
+            channel: The firmware channel (stable, beta, or canary)
+
+        Returns:
+            List of printer channels that should receive this rollout
+        """
+        return ChannelHierarchy.CHANNEL_EXPANSION.get(channel, [channel])
+
+
 class RolloutService:
     """Service for managing firmware update rollouts."""
 
     @staticmethod
     async def create_rollout(
         firmware_version: str,
+        channel: str = "stable",
         target_all: bool = False,
         target_user_ids: list[str] | None = None,
         target_printer_ids: list[str] | None = None,
@@ -44,6 +73,7 @@ class RolloutService:
 
         Args:
             firmware_version: Target firmware version string (e.g., "1.2.0")
+            channel: Firmware channel to deploy (stable, beta, canary)
             target_all: Whether to target all printers
             target_user_ids: Optional list of user IDs to target
             target_printer_ids: Optional list of printer IDs to target
@@ -64,6 +94,10 @@ class RolloutService:
             Rollouts are platform-agnostic. Each printer will receive firmware
             for its own platform when the update is delivered.
         """
+        # Validate channel
+        if channel not in ["stable", "beta", "canary"]:
+            raise ValueError(f"Invalid channel: {channel}")
+
         # Validate rollout type
         if rollout_type not in ["immediate", "gradual", "scheduled"]:
             raise ValueError(f"Invalid rollout type: {rollout_type}")
@@ -79,6 +113,7 @@ class RolloutService:
         # Create rollout (firmware_version is stored as string, platform-agnostic)
         rollout = create_rollout(
             firmware_version=firmware_version,
+            channel=channel,
             target_all=target_all,
             target_user_ids=target_user_ids,
             target_printer_ids=target_printer_ids,
@@ -110,8 +145,7 @@ class RolloutService:
         """
 
         if rollout.target_channels:
-            # For channel-based targeting, we need to get printers matching those channels
-            # This is handled by iterating through channels
+            # Explicit channel targeting - use provided channels as-is
             target_printers = []
             for channel in rollout.target_channels:
                 channel_printers = get_printers_by_filters(channel=channel)
@@ -128,22 +162,67 @@ class RolloutService:
                     filtered_printers.append(printer)
                 target_printers = filtered_printers
         elif rollout.target_all:
-            target_printers = get_printers_by_filters()
+            # Target all printers - expand rollout's channel hierarchically
+            expanded_channels = ChannelHierarchy.expand_channels(rollout.channel)
+            target_printers = []
+            for channel in expanded_channels:
+                channel_printers = get_printers_by_filters(channel=channel)
+                target_printers.extend(channel_printers)
+
+            # Apply version filters
+            if rollout.min_version or rollout.max_version:
+                filtered_printers = []
+                for printer in target_printers:
+                    if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
+                        continue
+                    if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
+                        continue
+                    filtered_printers.append(printer)
+                target_printers = filtered_printers
         elif rollout.target_user_ids:
-            # Target specific users
+            # Target specific users - expand rollout's channel hierarchically
+            expanded_channels = ChannelHierarchy.expand_channels(rollout.channel)
             target_printers = []
             for user_uuid in rollout.target_user_ids:
-                user_printers = get_printers_by_filters(user_uuid=user_uuid)
-                target_printers.extend(user_printers)
+                for channel in expanded_channels:
+                    user_printers = get_printers_by_filters(user_uuid=user_uuid, channel=channel)
+                    target_printers.extend(user_printers)
+
+            # Apply version filters
+            if rollout.min_version or rollout.max_version:
+                filtered_printers = []
+                for printer in target_printers:
+                    if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
+                        continue
+                    if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
+                        continue
+                    filtered_printers.append(printer)
+                target_printers = filtered_printers
         elif rollout.target_printer_ids:
-            # Target specific printers
+            # Target specific printers (no channel filtering needed)
             target_printers = []
             for printer_uuid in rollout.target_printer_ids:
                 printer = get_printer(printer_uuid)
                 if printer:
                     target_printers.append(printer)
         else:
+            # No targeting specified - expand rollout's channel hierarchically
+            expanded_channels = ChannelHierarchy.expand_channels(rollout.channel)
             target_printers = []
+            for channel in expanded_channels:
+                channel_printers = get_printers_by_filters(channel=channel)
+                target_printers.extend(channel_printers)
+
+            # Apply version filters
+            if rollout.min_version or rollout.max_version:
+                filtered_printers = []
+                for printer in target_printers:
+                    if rollout.min_version and compare_versions(printer.firmware_version, rollout.min_version) < 0:
+                        continue
+                    if rollout.max_version and compare_versions(printer.firmware_version, rollout.max_version) > 0:
+                        continue
+                    filtered_printers.append(printer)
+                target_printers = filtered_printers
 
         # Get unique printers
         unique_printers = list({p.uuid: p for p in target_printers}.values())
@@ -195,11 +274,11 @@ class RolloutService:
                 if printer.auto_update:
                     # Check rollout timing
                     if RolloutService._should_update_now(rollout, printer):
-                        # Get firmware for this printer's platform
-                        firmware = FirmwareService.get_firmware(rollout.firmware_version, printer_platform)
+                        # Get firmware for this printer's platform and rollout's channel
+                        firmware = FirmwareService.get_firmware(rollout.firmware_version, printer_platform, rollout.channel)
 
                         if not firmware:
-                            logger.warning(f"No firmware found for platform {printer_platform} version {rollout.firmware_version}")
+                            logger.warning(f"No firmware found for platform {printer_platform} version {rollout.firmware_version} channel {rollout.channel}")
                             skipped_no_firmware += 1
                             continue
 
