@@ -14,6 +14,7 @@ from src.crud import (
     get_active_rollout_for_printer,
     create_update_record,
     update_update_progress,
+    update_rollout_progress,
     mark_update_complete,
     mark_update_failed,
     mark_update_declined,
@@ -206,15 +207,18 @@ class UpdateService:
             logger.error(f"Printer {printer_uuid} not found when handling firmware complete for version {version}")
             return False
 
-        # Update printer's firmware version and platform
-        success = update_printer_firmware_info(
-            uuid=printer_uuid,
-            firmware_version=version,
-        )
+        # Mark update as complete and get rollout_id
+        history = get_printer_update_history(printer_uuid, limit=1)
+        rollout_id = history[0].rollout_id if history else None
 
-        # Mark update as complete
+        success = mark_update_complete(printer_uuid, version)
+
+        # Update printer's firmware version and platform
         if success:
-            mark_update_complete(printer_uuid, version)
+            update_printer_firmware_info(
+                uuid=printer_uuid,
+                firmware_version=version,
+            )
 
             # Update firmware statistics for the specific platform
             firmware = FirmwareService.get_firmware(version, printer.platform)
@@ -228,6 +232,17 @@ class UpdateService:
                 logger.warning(
                     f"Firmware {version} for platform {printer.platform} not found "
                     f"when recording success for printer {printer_uuid}"
+                )
+
+            # Update rollout counters if this was part of a rollout
+            if rollout_id:
+                update_rollout_progress(
+                    rollout_id=rollout_id,
+                    completed_increment=1,
+                    pending_decrement=1,
+                )
+                logger.info(
+                    f"Rollout {rollout_id}: Incremented completed_count for printer {printer_uuid}"
                 )
         else:
             logger.error(
@@ -257,31 +272,46 @@ class UpdateService:
             logger.error(f"Printer {printer_uuid} not found when handling firmware failure: {error_message}")
             return False
 
+        # Get the pending update to get rollout_id and record failure statistics
+        pending_update = get_printer_update_history(printer_uuid, limit=1)
+        rollout_id = pending_update[0].rollout_id if pending_update else None
+
         # Mark update as failed
         success = mark_update_failed(
             printer_id=printer_uuid,
             error_message=error_message,
         )
 
-        # Get the pending update to record failure statistics
-        pending_update = get_printer_update_history(printer_uuid, limit=1)
-        if pending_update and pending_update[0].firmware_version:
-            firmware = FirmwareService.get_firmware(pending_update[0].firmware_version, printer.platform)
-            if firmware:
-                FirmwareService.record_failure(firmware.id)
-                logger.warning(
-                    f"Printer {printer_uuid} failed to update to firmware {pending_update[0].firmware_version} "
-                    f"(platform={printer.platform}): {error_message}"
-                )
+        if success:
+            # Record firmware statistics
+            if pending_update and pending_update[0].firmware_version:
+                firmware = FirmwareService.get_firmware(pending_update[0].firmware_version, printer.platform)
+                if firmware:
+                    FirmwareService.record_failure(firmware.id)
+                    logger.warning(
+                        f"Printer {printer_uuid} failed to update to firmware {pending_update[0].firmware_version} "
+                        f"(platform={printer.platform}): {error_message}"
+                    )
+                else:
+                    logger.warning(
+                        f"Firmware {pending_update[0].firmware_version} for platform {printer.platform} not found "
+                        f"when recording failure for printer {printer_uuid}"
+                    )
             else:
                 logger.warning(
-                    f"Firmware {pending_update[0].firmware_version} for platform {printer.platform} not found "
-                    f"when recording failure for printer {printer_uuid}"
+                    f"No pending update found for printer {printer_uuid} when handling failure"
                 )
-        else:
-            logger.warning(
-                f"No pending update found for printer {printer_uuid} when handling failure"
-            )
+
+            # Update rollout counters if this was part of a rollout
+            if rollout_id:
+                update_rollout_progress(
+                    rollout_id=rollout_id,
+                    failed_increment=1,
+                    pending_decrement=1,
+                )
+                logger.warning(
+                    f"Rollout {rollout_id}: Incremented failed_count for printer {printer_uuid}"
+                )
 
         return success
 
@@ -299,11 +329,28 @@ class UpdateService:
         Returns:
             True if handled, False otherwise
         """
+        # Get the pending update to get rollout_id
+        pending_update = get_printer_update_history(printer_uuid, limit=1)
+        rollout_id = pending_update[0].rollout_id if pending_update else None
+
         # Mark update as declined
-        return mark_update_declined(
+        success = mark_update_declined(
             printer_id=printer_uuid,
             version=version,
         )
+
+        # Update rollout counters if this was part of a rollout
+        if success and rollout_id:
+            update_rollout_progress(
+                rollout_id=rollout_id,
+                declined_increment=1,
+                pending_decrement=1,
+            )
+            logger.info(
+                f"Rollout {rollout_id}: Incremented declined_count for printer {printer_uuid}"
+            )
+
+        return success
 
     @staticmethod
     def update_printer_subscription_info(
