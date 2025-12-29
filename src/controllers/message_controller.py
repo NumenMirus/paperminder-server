@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 
 from fastapi import WebSocket
+from fastapi.websockets import WebSocketState
 
 from src.services import MessageService
 from src.models.message import InboundMessage, OutboundMessage, StatusMessage, SubscriptionRequest
@@ -110,7 +111,7 @@ class ConnectionManager:
             update_message: The firmware update message dictionary
 
         Returns:
-            True if sent, False if printer not connected
+            True if sent to at least one socket, False if printer not connected
         """
         async with self._lock:
             sockets = list(self._connections.get(printer_uuid, []))
@@ -120,10 +121,38 @@ class ConnectionManager:
 
         import json
         payload = json.dumps(update_message)
-        for socket in sockets:
-            await socket.send_text(payload)
+        successful_sends = 0
+        failed_sockets = []
 
-        return True
+        for socket in sockets:
+            try:
+                # Check if socket is still connected before sending
+                if socket.client_state != WebSocketState.CONNECTED:
+                    self._logger.warning(f"Socket for printer {printer_uuid} is not connected (state: {socket.client_state})")
+                    failed_sockets.append(socket)
+                    continue
+
+                await socket.send_text(payload)
+                successful_sends += 1
+            except Exception as e:
+                self._logger.warning(f"Failed to send firmware update to socket for printer {printer_uuid}: {e}")
+                failed_sockets.append(socket)
+
+        # Remove failed sockets from connections
+        if failed_sockets:
+            async with self._lock:
+                sockets_list = self._connections.get(printer_uuid, [])
+                for failed_socket in failed_sockets:
+                    if failed_socket in sockets_list:
+                        sockets_list.remove(failed_socket)
+                # Clean up if no sockets left
+                if not sockets_list:
+                    self._connections.pop(printer_uuid, None)
+
+        if successful_sends > 0:
+            self._logger.info(f"Sent firmware update to printer {printer_uuid} ({successful_sends}/{len(sockets)} sockets succeeded)")
+
+        return successful_sends > 0
 
     async def send_bitmap_to_printer(self, printer_uuid: str, bitmap_message: dict) -> bool:
         """Send a bitmap print message to a specific printer.
@@ -133,7 +162,7 @@ class ConnectionManager:
             bitmap_message: The bitmap message dictionary with kind="print_bitmap"
 
         Returns:
-            True if sent, False if printer not connected
+            True if sent to at least one socket, False if printer not connected
         """
         async with self._lock:
             sockets = list(self._connections.get(printer_uuid, []))
@@ -143,15 +172,42 @@ class ConnectionManager:
 
         import json
         payload = json.dumps(bitmap_message)
+        successful_sends = 0
+        failed_sockets = []
+
         for socket in sockets:
-            await socket.send_text(payload)
+            try:
+                # Check if socket is still connected before sending
+                if socket.client_state != WebSocketState.CONNECTED:
+                    self._logger.warning(f"Socket for printer {printer_uuid} is not connected (state: {socket.client_state})")
+                    failed_sockets.append(socket)
+                    continue
 
-        self._logger.info(
-            f"Sent bitmap to printer {printer_uuid}: "
-            f"{bitmap_message.get('width')}x{bitmap_message.get('height')}px"
-        )
+                await socket.send_text(payload)
+                successful_sends += 1
+            except Exception as e:
+                self._logger.warning(f"Failed to send bitmap to socket for printer {printer_uuid}: {e}")
+                failed_sockets.append(socket)
 
-        return True
+        # Remove failed sockets from connections
+        if failed_sockets:
+            async with self._lock:
+                sockets_list = self._connections.get(printer_uuid, [])
+                for failed_socket in failed_sockets:
+                    if failed_socket in sockets_list:
+                        sockets_list.remove(failed_socket)
+                # Clean up if no sockets left
+                if not sockets_list:
+                    self._connections.pop(printer_uuid, None)
+
+        if successful_sends > 0:
+            self._logger.info(
+                f"Sent bitmap to printer {printer_uuid}: "
+                f"{bitmap_message.get('width')}x{bitmap_message.get('height')}px "
+                f"({successful_sends}/{len(sockets)} sockets succeeded)"
+            )
+
+        return successful_sends > 0
 
     def is_printer_connected(self, printer_uuid: str) -> bool:
         """Check if a printer is currently connected.
