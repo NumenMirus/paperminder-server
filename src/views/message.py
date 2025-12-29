@@ -138,10 +138,17 @@ async def send_qr_code(
     # Create bitmap message
     try:
         bitmap_msg = BitmapService.create_bitmap_message(qr_img, caption)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid bitmap parameters: {e}",
+        ) from e
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Failed to process bitmap")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process bitmap: {e}",
+            detail=f"Failed to process bitmap: {type(e).__name__}: {e}",
         ) from e
 
     # Send to printer
@@ -226,10 +233,17 @@ async def send_bitmap_image(
     # Create bitmap message
     try:
         bitmap_msg = BitmapService.create_bitmap_message(img, caption)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid bitmap parameters: {e}",
+        ) from e
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Failed to process bitmap")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process bitmap: {e}",
+            detail=f"Failed to process bitmap: {type(e).__name__}: {e}",
         ) from e
 
     # Send to printer
@@ -299,10 +313,17 @@ async def send_test_pattern(
     # Create bitmap message
     try:
         bitmap_msg = BitmapService.create_bitmap_message(test_img, None)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid bitmap parameters: {e}",
+        ) from e
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Failed to process bitmap")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process bitmap: {e}",
+            detail=f"Failed to process bitmap: {type(e).__name__}: {e}",
         ) from e
 
     # Send to printer
