@@ -298,14 +298,12 @@ class BitmapService:
                         [x, y, x + square_size - 1, y + square_size - 1], fill=0
                     )
 
-        # Draw text
+        # Draw simple text without font (Pillow will use basic bitmap font)
+        # Use try/except to handle cases where text rendering fails
         try:
-            # Try to use a truetype font
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+            draw.text((size // 2 - 12, size // 2 - 6), "TEST", fill=0)
         except Exception:
-            # Fall back to default font
-            font = ImageFont.load_default()
-
-        draw.text((10, size // 2 - 10), "TEST", fill=0, font=font)
+            # If text drawing fails, just skip it
+            pass
 
         return img
