@@ -125,6 +125,34 @@ class ConnectionManager:
 
         return True
 
+    async def send_bitmap_to_printer(self, printer_uuid: str, bitmap_message: dict) -> bool:
+        """Send a bitmap print message to a specific printer.
+
+        Args:
+            printer_uuid: The printer UUID
+            bitmap_message: The bitmap message dictionary with kind="print_bitmap"
+
+        Returns:
+            True if sent, False if printer not connected
+        """
+        async with self._lock:
+            sockets = list(self._connections.get(printer_uuid, []))
+
+        if not sockets:
+            return False
+
+        import json
+        payload = json.dumps(bitmap_message)
+        for socket in sockets:
+            await socket.send_text(payload)
+
+        self._logger.info(
+            f"Sent bitmap to printer {printer_uuid}: "
+            f"{bitmap_message.get('width')}x{bitmap_message.get('height')}px"
+        )
+
+        return True
+
     def is_printer_connected(self, printer_uuid: str) -> bool:
         """Check if a printer is currently connected.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 from json import JSONDecodeError
 from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
@@ -16,7 +17,13 @@ from src.models.firmware import (
     FirmwareCompleteMessage,
     FirmwareFailedMessage,
 )
+from src.models.bitmap import (
+    BitmapPrintingMessage,
+    BitmapErrorMessage,
+)
 from src.crud import update_printer_connection_status
+
+_logger = logging.getLogger(__name__)
 
 
 ws_router = APIRouter(tags=["websocket"])
@@ -78,6 +85,11 @@ async def websocket_entrypoint(websocket: WebSocket, user_id: UUID) -> None:
             # Handle firmware update messages from printers
             if payload.get("kind") in ["firmware_declined", "firmware_progress", "firmware_complete", "firmware_failed"]:
                 await _handle_firmware_message(user_key, payload)
+                continue
+
+            # Handle bitmap printing messages from printers
+            if payload.get("kind") in ["bitmap_printing", "bitmap_error"]:
+                await _handle_bitmap_message(user_key, payload)
                 continue
 
             # Handle regular messages
@@ -163,10 +175,37 @@ async def _handle_firmware_message(printer_uuid: str, payload: dict) -> None:
 
     except ValidationError as exc:
         # Log validation error - can't send notification without websocket reference
-        import logging
-        logging.getLogger(__name__).error(f"Firmware message validation error: {exc}")
+        _logger.error(f"Firmware message validation error: {exc}")
     except Exception as exc:
         # Log error but don't send notification to avoid infinite loop
-        import logging
-        logging.getLogger(__name__).exception(f"Failed to handle firmware message: {exc}")
+        _logger.exception(f"Failed to handle firmware message: {exc}")
+
+
+async def _handle_bitmap_message(printer_uuid: str, payload: dict) -> None:
+    """Handle bitmap printing messages from printers.
+
+    Args:
+        printer_uuid: The printer UUID
+        payload: The bitmap message payload
+    """
+    message_kind = payload.get("kind")
+
+    try:
+        if message_kind == "bitmap_printing":
+            message = BitmapPrintingMessage.model_validate(payload)
+            _logger.info(
+                f"Printer {printer_uuid} successfully started bitmap print: "
+                f"{message.width}x{message.height}px"
+            )
+
+        elif message_kind == "bitmap_error":
+            message = BitmapErrorMessage.model_validate(payload)
+            _logger.warning(
+                f"Printer {printer_uuid} bitmap print failed: {message.error}"
+            )
+
+    except ValidationError as exc:
+        _logger.error(f"Bitmap message validation error: {exc}")
+    except Exception as exc:
+        _logger.exception(f"Failed to handle bitmap message: {exc}")
 
