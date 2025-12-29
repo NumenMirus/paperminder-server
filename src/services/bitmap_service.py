@@ -14,13 +14,12 @@ import base64
 from io import BytesIO
 
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 from src.utils.bitmap import (
-    calculate_bitmap_data_size,
+    STANDARD_WIDTH_58MM,
     validate_bitmap_dimensions,
     validate_bitmap_size,
-    STANDARD_WIDTH_58MM,
 )
 
 
@@ -44,21 +43,37 @@ class BitmapService:
         if size % 8 != 0:
             raise ValueError(f"QR code size must be multiple of 8, got {size}")
 
-        # Create QR code
+        # Create QR code - ERROR_CORRECT_M = 0 (15% error correction)
         qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            version=None,  # Auto-select version
+            error_correction=0,  # ERROR_CORRECT_M
             box_size=max(1, size // 25),
             border=2,
         )
         qr.add_data(url)
         qr.make(fit=True)
 
-        # Generate image
-        img = qr.make_image(fill_color="black", back_color="white")
+        # Generate PIL Image
+        # In newer qrcode versions, make_image() returns PIL Image directly
+        try:
+            img = qr.make_image(fill_color="black", back_color="white")
+        except TypeError:
+            # Fallback for older versions
+            img = qr.make_image()
 
-        # Convert to grayscale
-        img = img.convert("L")
+        # Convert to PIL Image if needed
+        if hasattr(img, 'pil_image'):
+            img = img.pil_image
+        elif hasattr(img, '_image'):
+            img = img._image
+
+        # Ensure it's a PIL Image
+        if not isinstance(img, Image.Image):
+            raise ValueError(f"QR code generation returned unexpected type: {type(img)}")
+
+        # Convert to grayscale if needed
+        if img.mode != "L":
+            img = img.convert("L")
 
         # Resize to exact size
         img = img.resize((size, size), Image.Resampling.LANCZOS)
