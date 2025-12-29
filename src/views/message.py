@@ -135,9 +135,9 @@ async def send_qr_code(
             detail=f"Failed to generate QR code: {e}",
         ) from e
 
-    # Create bitmap message
+    # Create bitmap message (respecting platform limits)
     try:
-        bitmap_msg = BitmapService.create_bitmap_message(qr_img, caption)
+        bitmap_msg = BitmapService.create_bitmap_message(qr_img, caption, platform=printer.platform)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,19 +220,19 @@ async def send_bitmap_image(
             detail=f"Failed to load image: {e}",
         ) from e
 
-    # Resize if target_width specified
+    # Resize if target_width specified (respecting platform limits)
     if target_width is not None:
         try:
-            img = BitmapService.resize_for_printer(img, target_width)
+            img = BitmapService.resize_for_printer(img, target_width, platform=printer.platform)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to resize image: {e}",
             ) from e
 
-    # Create bitmap message
+    # Create bitmap message (respecting platform limits)
     try:
-        bitmap_msg = BitmapService.create_bitmap_message(img, caption)
+        bitmap_msg = BitmapService.create_bitmap_message(img, caption, platform=printer.platform)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -310,9 +310,9 @@ async def send_test_pattern(
             detail=f"Failed to generate test pattern: {e}",
         ) from e
 
-    # Create bitmap message
+    # Create bitmap message (respecting platform limits)
     try:
-        bitmap_msg = BitmapService.create_bitmap_message(test_img, None)
+        bitmap_msg = BitmapService.create_bitmap_message(test_img, None, platform=printer.platform)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

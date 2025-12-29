@@ -18,6 +18,7 @@ from PIL import Image
 
 from src.utils.bitmap import (
     STANDARD_WIDTH_58MM,
+    get_max_dimension_for_platform,
     validate_bitmap_dimensions,
     validate_bitmap_size,
 )
@@ -106,14 +107,18 @@ class BitmapService:
 
     @staticmethod
     def resize_for_printer(
-        img: Image.Image, target_width: int | None = None
+        img: Image.Image,
+        target_width: int | None = None,
+        platform: str | None = None,
     ) -> Image.Image:
         """Resize an image for thermal printer.
 
         Args:
             img: PIL Image to resize
             target_width: Target width in pixels (must be multiple of 8).
-                        If None, uses standard 58mm width (384px).
+                        If None, uses standard 58mm width (384px) or platform limit.
+            platform: Printer platform (e.g., "esp8266", "esp32-c3"). If provided,
+                     respects platform-specific maximum dimensions.
 
         Returns:
             Resized PIL Image
@@ -123,6 +128,13 @@ class BitmapService:
         """
         if target_width is None:
             target_width = STANDARD_WIDTH_58MM
+
+        # If platform is specified, respect its maximum dimension
+        if platform:
+            max_dimension = get_max_dimension_for_platform(platform)
+            # Ensure target_width doesn't exceed platform limit
+            if target_width > max_dimension:
+                target_width = max_dimension
 
         # Ensure width is multiple of 8
         target_width = (target_width // 8) * 8
@@ -241,7 +253,9 @@ class BitmapService:
 
     @staticmethod
     def create_bitmap_message(
-        img: Image.Image, caption: str | None = None
+        img: Image.Image,
+        caption: str | None = None,
+        platform: str | None = None,
     ) -> dict[str, object]:
         """Create a bitmap WebSocket message from a PIL image.
 
@@ -255,6 +269,8 @@ class BitmapService:
         Args:
             img: PIL Image to process
             caption: Optional caption text
+            platform: Printer platform (e.g., "esp8266", "esp32-c3"). If provided,
+                     respects platform-specific maximum dimensions.
 
         Returns:
             Dictionary suitable for sending as WebSocket message
@@ -262,8 +278,8 @@ class BitmapService:
         Raises:
             ValueError: If image processing fails
         """
-        # Resize for printer (ensure width is multiple of 8)
-        img = BitmapService.resize_for_printer(img)
+        # Resize for printer (ensure width is multiple of 8 and respects platform limit)
+        img = BitmapService.resize_for_printer(img, platform=platform)
 
         # Apply dithering
         img = BitmapService.apply_dithering(img)
