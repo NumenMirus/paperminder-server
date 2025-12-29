@@ -15,7 +15,7 @@ STANDARD_WIDTH_80MM = 576  # Standard width for 80mm thermal paper
 # Platform-specific maximum bitmap dimensions
 # Different ESP platforms have different memory constraints
 PLATFORM_BITMAP_LIMITS = {
-    "esp8266": 320,      # ESP8266 has limited RAM
+    "esp8266": 256,      # ESP8266 has limited RAM
     "esp32": 384,        # ESP32 has more RAM
     "esp32-c3": 384,     # ESP32-C3
     "esp32-s2": 384,     # ESP32-S2
