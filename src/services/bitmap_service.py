@@ -53,25 +53,24 @@ class BitmapService:
         qr.add_data(url)
         qr.make(fit=True)
 
-        # Generate PIL Image
-        img = qr.make_image(fill_color="black", back_color="white")
+        # Generate image
+        try:
+            img = qr.make_image(fill_color="black", back_color="white")
+        except Exception as e:
+            raise ValueError(f"Failed to generate QR code image: {e}") from e
 
-        # Extract the actual PIL Image from qrcode.pil.PilImage wrapper
-        # The wrapper has a 'pil' attribute that contains the actual PIL Image
-        if hasattr(img, 'pil'):
-            img = img.pil
-        elif hasattr(img, 'pil_image'):
-            img = img.pil_image
-        elif hasattr(img, '_image'):
-            img = img._image
+        # The qrcode library returns a PilImage wrapper
+        # Call get_image() to extract the actual PIL Image
+        if hasattr(img, 'get_image'):
+            img = img.get_image()
         elif not isinstance(img, Image.Image):
-            # If all else fails, try to convert it
-            try:
-                img = Image.open(img)
-            except Exception:
-                raise ValueError(f"Cannot extract PIL Image from {type(img)}")
+            # Fallback for older qrcode versions that might return PIL Image directly
+            raise ValueError(
+                f"Cannot extract PIL Image from qrcode type {type(img)}. "
+                f"Available attributes: {[a for a in dir(img) if not a.startswith('_')]}"
+            )
 
-        # Ensure it's a PIL Image
+        # Verify we have a PIL Image
         if not isinstance(img, Image.Image):
             raise ValueError(f"QR code generation returned unexpected type: {type(img)}")
 
