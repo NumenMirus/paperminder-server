@@ -54,18 +54,22 @@ class BitmapService:
         qr.make(fit=True)
 
         # Generate PIL Image
-        # In newer qrcode versions, make_image() returns PIL Image directly
-        try:
-            img = qr.make_image(fill_color="black", back_color="white")
-        except TypeError:
-            # Fallback for older versions
-            img = qr.make_image()
+        img = qr.make_image(fill_color="black", back_color="white")
 
-        # Convert to PIL Image if needed
-        if hasattr(img, 'pil_image'):
+        # Extract the actual PIL Image from qrcode.pil.PilImage wrapper
+        # The wrapper has a 'pil' attribute that contains the actual PIL Image
+        if hasattr(img, 'pil'):
+            img = img.pil
+        elif hasattr(img, 'pil_image'):
             img = img.pil_image
         elif hasattr(img, '_image'):
             img = img._image
+        elif not isinstance(img, Image.Image):
+            # If all else fails, try to convert it
+            try:
+                img = Image.open(img)
+            except Exception:
+                raise ValueError(f"Cannot extract PIL Image from {type(img)}")
 
         # Ensure it's a PIL Image
         if not isinstance(img, Image.Image):
