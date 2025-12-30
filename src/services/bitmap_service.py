@@ -138,9 +138,6 @@ class BitmapService:
         if img.mode != "L":
             img = img.convert("L")
 
-        # Make a copy to avoid modifying the original
-        img = img.copy()
-
         pixels = img.load()
         width, height = img.size
 
@@ -153,22 +150,22 @@ class BitmapService:
                 quant_error = old_pixel - new_pixel
 
                 # Distribute error to neighboring pixels
-                # Use int() to ensure we store integer values
                 if x + 1 < width:
-                    new_val = int(pixels[x + 1, y] + quant_error * 7 / 16)
-                    pixels[x + 1, y] = max(0, min(255, new_val))
-
+                    pixels[x + 1, y] = min(
+                        255, max(0, pixels[x + 1, y] + quant_error * 7 / 16)
+                    )
                 if x - 1 >= 0 and y + 1 < height:
-                    new_val = int(pixels[x - 1, y + 1] + quant_error * 3 / 16)
-                    pixels[x - 1, y + 1] = max(0, min(255, new_val))
-
+                    pixels[x - 1, y + 1] = min(
+                        255, max(0, pixels[x - 1, y + 1] + quant_error * 3 / 16)
+                    )
                 if y + 1 < height:
-                    new_val = int(pixels[x, y + 1] + quant_error * 5 / 16)
-                    pixels[x, y + 1] = max(0, min(255, new_val))
-
+                    pixels[x, y + 1] = min(
+                        255, max(0, pixels[x, y + 1] + quant_error * 5 / 16)
+                    )
                 if x + 1 < width and y + 1 < height:
-                    new_val = int(pixels[x + 1, y + 1] + quant_error * 1 / 16)
-                    pixels[x + 1, y + 1] = max(0, min(255, new_val))
+                    pixels[x + 1, y + 1] = min(
+                        255, max(0, pixels[x + 1, y + 1] + quant_error * 1 / 16)
+                    )
 
         # Convert to 1-bit mode
         return img.convert("1")
