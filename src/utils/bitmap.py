@@ -12,33 +12,6 @@ MAX_BITMAP_SIZE_BYTES = 50 * 1024  # 50KB max bitmap data size
 STANDARD_WIDTH_58MM = 384  # Standard width for 58mm thermal paper
 STANDARD_WIDTH_80MM = 576  # Standard width for 80mm thermal paper
 
-# Platform-specific maximum bitmap dimensions
-# Different ESP platforms have different memory constraints
-PLATFORM_BITMAP_LIMITS = {
-    "esp8266": 320,      # ESP8266 has limited RAM
-    "esp32": 384,        # ESP32 has more RAM
-    "esp32-c3": 384,     # ESP32-C3
-    "esp32-s2": 384,     # ESP32-S2
-    "esp32-s3": 384,     # ESP32-S3 has the most RAM
-    # Default to 384 for unknown platforms (can be overridden)
-}
-
-
-def get_max_dimension_for_platform(platform: str) -> int:
-    """Get the maximum bitmap dimension for a given platform.
-
-    Args:
-        platform: Platform identifier (e.g., "esp8266", "esp32-c3")
-
-    Returns:
-        Maximum width/height in pixels for the platform
-    """
-    # Normalize platform string (handle esp32-c3, esp32c3, esp32_c3 variants)
-    normalized = platform.lower().replace("_", "-")
-
-    # Return platform-specific limit or default to 384
-    return PLATFORM_BITMAP_LIMITS.get(normalized, 384)
-
 
 def validate_bitmap_dimensions(width: int, height: int) -> bool:
     """Validate that bitmap dimensions are acceptable.
