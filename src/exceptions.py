@@ -7,11 +7,3 @@ class RecipientNotConnectedError(RuntimeError):
 
 class RecipientNotFoundError(RuntimeError):
     """Raised when attempting to send a message to a non-existent recipient."""
-
-
-class BitmapProcessingError(RuntimeError):
-    """Raised when bitmap image processing fails."""
-
-
-class BitmapValidationError(RuntimeError):
-    """Raised when bitmap validation fails."""
