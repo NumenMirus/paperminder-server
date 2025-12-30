@@ -169,14 +169,6 @@ src/
 - **Views** (`src/views/printer.py`): HTTP endpoints for printer CRUD and group management
 - **CRUD** (`src/crud.py`): Database persistence
 
-**Bitmap Printing System**
-- **Models** (`src/models/bitmap.py`): PrintBitmapMessage (server→printer), BitmapPrintingMessage (printer→server), BitmapErrorMessage (printer→server)
-- **Service** (`src/services/bitmap_service.py`): QR code generation, image processing (resizing, Floyd-Steinberg dithering), conversion to 1-bit packed bitmap format
-- **Utilities** (`src/utils/bitmap.py`): Validation functions, printer specifications, size limits
-- **Views** (`src/views/message.py`): HTTP endpoints for QR codes, image upload, test patterns
-- **Controller** (`src/controllers/message_controller.py`): `send_bitmap_to_printer()` method
-- **WebSocket Handler** (`src/views/ws.py`): Handles bitmap printing responses from printers
-
 **Firmware Update System**
 This is a multi-tier orchestration system for ESP printer firmware updates:
 - **Models**: Pydantic schemas for firmware metadata, rollout config, update messages
@@ -240,14 +232,6 @@ This ensures the same printers are always in the same buckets.
 **5. Daily Message Numbers**
 Each printer tracks `daily_message_number` that resets daily. Messages include a sequential number that resets at midnight. This is used by printers to track if they missed messages.
 
-**6. Bitmap Printing**
-The server processes all images for thermal printing:
-- **Image Processing Pipeline**: QR code generation → Resize (width multiple of 8) → Floyd-Steinberg dithering → 1-bit packed format → Base64 encoding
-- **Bitmap Format**: 1-bit monochrome, MSB-first (bit 7 = leftmost pixel), row-major order, 1 = black (print), 0 = white (no print)
-- **Size Limits**: Maximum 50KB bitmap data, width must be multiple of 8
-- **WebSocket Messages**: Server sends `print_bitmap`, printer responds with `bitmap_printing` (success) or `bitmap_error` (failure)
-- **HTTP API**: `/api/message/bitmap/qr` (QR codes), `/api/message/bitmap/image` (upload), `/api/message/bitmap/test` (debugging)
-
 ### Database Schema Highlights
 
 **Important Tables:**
@@ -276,15 +260,11 @@ The server processes all images for thermal printing:
 - `firmware_complete`: Printer reports successful update (version)
 - `firmware_failed`: Printer reports update failure (error)
 - `firmware_declined`: Printer declines update (version, auto_update)
-- `print_bitmap`: Server sends bitmap to printer (width, height, data, caption)
-- `bitmap_printing`: Printer acknowledges bitmap print started (width, height)
-- `bitmap_error`: Printer reports bitmap printing failure (error)
 
 **Server → Client messages:**
 - `OutboundMessage`: Delivered messages with daily_number and timestamp
 - `StatusMessage`: System notifications (validation errors, connection status)
 - `FirmwareUpdateMessage`: Pushed to printers (version, url, md5 checksum)
-- `PrintBitmapMessage`: Pushed to printers (width, height, base64-encoded bitmap data)
 
 ### Message Delivery Flow
 1. Client sends `InboundMessage` via WebSocket
@@ -304,25 +284,6 @@ The server processes all images for thermal printing:
 7. Server updates `UpdateHistory` and `UpdateRollout` counters
 
 **Important:** Each printer receives firmware for its specific platform. A rollout for version "1.5.0" will deliver different firmware binaries to esp8266 vs esp32-c3 printers.
-
-### Bitmap Printing Flow
-1. HTTP API endpoint receives request (QR code URL, image upload, or test pattern)
-2. Server validates printer exists and is connected
-3. **Image Processing** (via `BitmapService`):
-   - **QR Code**: Generate using `qrcode` library with error correction M
-   - **Image Upload**: Load from bytes, convert to grayscale
-   - **Resize**: Scale to target width (multiple of 8, default 384px for 58mm paper)
-   - **Dither**: Apply Floyd-Steinberg dithering for quality
-   - **Pack**: Convert to 1-bit packed bitmap format (MSB-first, row-major)
-   - **Encode**: Base64-encode the bitmap data
-4. Server sends `PrintBitmapMessage` via WebSocket to printer
-5. Printer receives message and decodes base64 data
-6. Printer prints bitmap and sends response:
-   - `BitmapPrintingMessage`: Success (width, height)
-   - `BitmapErrorMessage`: Failure (error description)
-7. Server logs the response
-
-**Important**: All image processing happens server-side. Printers only receive the final 1-bit packed bitmap format.
 
 ### Dependency Injection for Authorization
 ```python
@@ -452,16 +413,3 @@ raise RecipientNotConnectedError(f"Recipient {recipient_id} is not connected")
 # Raise when recipient UUID doesn't exist in database
 raise RecipientNotFoundError(f"Recipient {recipient_id} does not exist")
 ```
-
-**9. Bitmap Width Must Be Multiple of 8**
-When working with bitmap images for thermal printers, width must always be a multiple of 8:
-```python
-from src.services.bitmap_service import BitmapService
-
-# WRONG - width not multiple of 8
-qr_img = BitmapService.generate_qr_code(url, size=100)  # Will raise ValueError
-
-# CORRECT - width is multiple of 8
-qr_img = BitmapService.generate_qr_code(url, size=128)  # OK
-```
-This is because bitmap data is packed into bytes (8 pixels per byte). The validation utilities in `src/utils/bitmap.py` will enforce this constraint.
