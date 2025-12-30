@@ -285,24 +285,25 @@ class BitmapService:
         if size % 8 != 0:
             raise ValueError(f"Test pattern size must be multiple of 8, got {size}")
 
-        # Create grayscale image (white background)
+        # Create grayscale image
         img = Image.new("L", (size, size), color=255)
+        draw = ImageDraw.Draw(img)
 
-        # Create pixel access object
-        pixels = img.load()
-
-        # Draw checkerboard pattern using direct pixel access
+        # Draw checkerboard pattern
         square_size = 16
-        for y in range(size):
-            for x in range(size):
-                # Determine which square this pixel is in
-                square_x = x // square_size
-                square_y = y // square_size
+        for y in range(0, size, square_size):
+            for x in range(0, size, square_size):
+                if ((x // square_size) + (y // square_size)) % 2 == 0:
+                    draw.rectangle(
+                        [x, y, x + square_size - 1, y + square_size - 1], fill=0
+                    )
 
-                # Alternate between black (0) and white (255)
-                if (square_x + square_y) % 2 == 0:
-                    pixels[x, y] = 0  # Black
-                else:
-                    pixels[x, y] = 255  # White
+        # Draw simple text without font (Pillow will use basic bitmap font)
+        # Use try/except to handle cases where text rendering fails
+        try:
+            draw.text((size // 2 - 12, size // 2 - 6), "TEST", fill=0)
+        except Exception:
+            # If text drawing fails, just skip it
+            pass
 
         return img
