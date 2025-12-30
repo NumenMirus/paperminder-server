@@ -99,7 +99,6 @@ DATABASE_URL="..." uv run alembic show <revision_id>
 
 **Important Notes:**
 - Always review auto-generated migrations before applying
-- Use `op.batch_alter_table()` for table alterations (better for SQLite compatibility and reproducibility)
 - PostgreSQL requires string defaults to be quoted in migrations: `server_default=sa.text("'value'")`
 - For JSONB columns, use `postgresql.JSONB()` type
 - Boolean defaults use lowercase text: `server_default=sa.text("true")` or `sa.text("false")`
@@ -161,12 +160,6 @@ src/
 - **Models**: Pydantic schemas for InboundMessage, OutboundMessage, StatusMessage
 - **Service** (`src/services/message_service.py`): Message validation, sanitization, routing
 - **Controller** (`src/controllers/message_controller.py`): WebSocket message handling
-- **CRUD** (`src/crud.py`): Database persistence
-
-**Printer Management System**
-- **Models**: Pydantic schemas for PrinterRegistrationRequest, PrinterResponse
-- **Service** (`src/services/printer_service.py`): Printer registration, deletion, group membership
-- **Views** (`src/views/printer.py`): HTTP endpoints for printer CRUD and group management
 - **CRUD** (`src/crud.py`): Database persistence
 
 **Firmware Update System**
@@ -241,7 +234,7 @@ Each printer tracks `daily_message_number` that resets daily. Messages include a
 - **MessageLog**: Historical record of all delivered messages (recipient references printer UUID)
 - **MessageCache**: Temporary storage for offline recipients (delivered on reconnect via `is_delivered` flag)
 - **FirmwareVersion**: Firmware binaries stored as BLOB with MD5/SHA256 checksums, **platform-specific** (unique constraint on version + platform), mandatory flag
-- **UpdateRollout**: Campaign configuration with JSONB targeting fields (target_user_ids, target_printer_ids, target_channels, channel) - platform-agnostic version strings only
+- **UpdateRollout**: Campaign configuration with JSONB targeting fields (target_user_ids, target_printer_ids, target_channels) - platform-agnostic version strings only
 - **UpdateHistory**: Individual update attempts with progress tracking (status: pending/downloading/completed/failed/declined)
 
 **Key Relationships:**
@@ -401,15 +394,3 @@ When printers send subscription messages, they must use `printer_id` (not `api_k
 }
 ```
 The `api_key` field is deprecated and ignored. Always use `printer_id` with the printer's UUID.
-
-**8. Custom Exceptions**
-Use the custom exceptions from `src/exceptions.py` for specific error conditions:
-```python
-from src.exceptions import RecipientNotConnectedError, RecipientNotFoundError
-
-# Raise when recipient has no active WebSocket connections
-raise RecipientNotConnectedError(f"Recipient {recipient_id} is not connected")
-
-# Raise when recipient UUID doesn't exist in database
-raise RecipientNotFoundError(f"Recipient {recipient_id} does not exist")
-```
