@@ -17,6 +17,7 @@ from src.database import (
     FirmwareVersion,
     UpdateRollout,
     UpdateHistory,
+    FirmwareUpdateCache,
     session_scope,
     hash_password,
     verify_password,
@@ -1791,6 +1792,104 @@ def get_rollout_update_history(
             .all()
         )
         return history
+
+
+# ============================================================================
+# FIRMWARE UPDATE CACHE CRUD OPERATIONS
+# ============================================================================
+
+
+def cache_firmware_update(
+    printer_id: str,
+    rollout_id: int,
+    firmware_version: str,
+    platform: str,
+    channel: str,
+    md5_checksum: str,
+) -> FirmwareUpdateCache:
+    """Store a firmware update in the cache for an offline printer.
+
+    Args:
+        printer_id: The printer UUID
+        rollout_id: The rollout database ID
+        firmware_version: The firmware version to deliver
+        platform: The printer platform
+        channel: The firmware channel
+        md5_checksum: MD5 checksum of the firmware file
+
+    Returns:
+        The created FirmwareUpdateCache object
+    """
+    with session_scope() as session:
+        cache_entry = FirmwareUpdateCache(
+            printer_id=printer_id,
+            rollout_id=rollout_id,
+            firmware_version=firmware_version,
+            platform=platform,
+            channel=channel,
+            md5_checksum=md5_checksum,
+        )
+        session.add(cache_entry)
+        session.flush()
+        session.refresh(cache_entry)
+        return cache_entry
+
+
+def get_cached_firmware_updates(printer_id: str) -> list[FirmwareUpdateCache]:
+    """Retrieve undelivered cached firmware updates for a printer.
+
+    Args:
+        printer_id: The printer UUID
+
+    Returns:
+        List of undelivered FirmwareUpdateCache objects
+    """
+    with session_scope() as session:
+        updates = (
+            session.query(FirmwareUpdateCache)
+            .filter_by(printer_id=printer_id, is_delivered=False)
+            .order_by(FirmwareUpdateCache.created_at)
+            .all()
+        )
+        return updates
+
+
+def mark_firmware_update_delivered(printer_id: str) -> int:
+    """Mark all cached firmware updates for a printer as delivered.
+
+    Args:
+        printer_id: The printer UUID
+
+    Returns:
+        Number of updates marked as delivered
+    """
+    with session_scope() as session:
+        count = (
+            session.query(FirmwareUpdateCache)
+            .filter_by(printer_id=printer_id, is_delivered=False)
+            .update({"is_delivered": True})
+        )
+        return count
+
+
+def delete_old_firmware_update_cache(days: int = 7) -> int:
+    """Delete delivered firmware update cache entries older than specified days.
+
+    Args:
+        days: Number of days to keep delivered updates
+
+    Returns:
+        Number of cache entries deleted
+    """
+    from datetime import timedelta
+    cutoff_date = datetime_import()() - timedelta(days=days)
+    with session_scope() as session:
+        count = (
+            session.query(FirmwareUpdateCache)
+            .filter(FirmwareUpdateCache.created_at < cutoff_date, FirmwareUpdateCache.is_delivered)
+            .delete()
+        )
+        return count
 
 
 # ============================================================================

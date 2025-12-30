@@ -306,6 +306,22 @@ class UpdateHistory(Base):
     rollout: Mapped[UpdateRollout] = relationship("UpdateRollout", foreign_keys=[rollout_id])
 
 
+class FirmwareUpdateCache(Base):
+    """ORM model for caching firmware updates for offline printers."""
+
+    __tablename__ = "firmware_update_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    printer_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    rollout_id: Mapped[int] = mapped_column(Integer, ForeignKey("update_rollouts.id"), nullable=False, index=True)
+    firmware_version: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    md5_checksum: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    is_delivered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), index=True)
+
+
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 _configured_url: str | None = None

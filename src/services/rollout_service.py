@@ -20,6 +20,7 @@ from src.crud import (
     get_printer,
     create_update_record,
     compare_versions,
+    cache_firmware_update,
 )
 from src.services.firmware_service import FirmwareService
 
@@ -318,6 +319,33 @@ class RolloutService:
             else:
                 not_connected_count += 1
                 logger.debug(f"Rollout {rollout.id}: Printer {printer.uuid} not connected")
+
+                # Cache firmware update for offline printers
+                if printer.auto_update and RolloutService._should_update_now(rollout, printer):
+                    # Get firmware for this printer's platform and rollout's channel
+                    firmware = FirmwareService.get_firmware(rollout.firmware_version, printer_platform, rollout.channel)
+
+                    if not firmware:
+                        logger.warning(f"Rollout {rollout.id}: No firmware found for platform {printer_platform} version {rollout.firmware_version} channel {rollout.channel}")
+                        skipped_no_firmware += 1
+                        continue
+
+                    # Cache the firmware update for when printer comes online
+                    from src.utils.platform import normalize_platform
+                    normalized_platform = normalize_platform(firmware.platform) or firmware.platform
+                    try:
+                        await asyncio.to_thread(
+                            cache_firmware_update,
+                            printer_id=printer.uuid,
+                            rollout_id=rollout.id,
+                            firmware_version=firmware.version,
+                            platform=normalized_platform,
+                            channel=rollout.channel,
+                            md5_checksum=firmware.md5_checksum,
+                        )
+                        logger.debug(f"Rollout {rollout.id}: Cached firmware update {firmware.version} for offline printer {printer.uuid}")
+                    except Exception as e:
+                        logger.error(f"Rollout {rollout.id}: Failed to cache firmware update for printer {printer.uuid}: {e}")
 
         # Update rollout counters - decrement pending_count for notified printers
         if notified_printers:

@@ -394,3 +394,4 @@ When printers send subscription messages, they must use `printer_id` (not `api_k
 }
 ```
 The `api_key` field is deprecated and ignored. Always use `printer_id` with the printer's UUID.
+- all the migrations must be run by me

@@ -62,6 +62,12 @@ class ConnectionManager:
             online=True,
         )
 
+        # Send cached normal messages first (messages queued while printer was offline)
+        await self.send_cached_messages(printer_uuid, websocket)
+
+        # Then send cached firmware updates (firmware queued while printer was offline)
+        await self._send_cached_firmware_updates(websocket, printer_uuid)
+
         # Check for available firmware updates
         if subscription.auto_update:
             await self._check_and_push_update(websocket, subscription)
@@ -101,6 +107,54 @@ class ConnectionManager:
                 self._logger.info(f"Pushed firmware update {firmware.version} to printer {printer_uuid}")
         except Exception as e:
             self._logger.exception(f"Failed to check/push firmware update: {e}")
+
+    async def _send_cached_firmware_updates(self, websocket: WebSocket, printer_uuid: str) -> None:
+        """Send cached firmware updates to a printer that just came online."""
+        try:
+            from src.crud import get_cached_firmware_updates, mark_firmware_update_delivered
+
+            cached_updates = await asyncio.to_thread(get_cached_firmware_updates, printer_uuid)
+
+            if cached_updates:
+                # Get base URL for firmware downloads
+                settings = get_settings()
+                base_url = getattr(settings, 'base_url', 'http://localhost:8000')
+
+                for cached in cached_updates:
+                    # Create firmware update message from cached data
+                    from src.utils.platform import normalize_platform
+
+                    normalized_platform = normalize_platform(cached.platform) or cached.platform
+                    update_message = {
+                        "kind": "firmware_update",
+                        "version": cached.firmware_version,
+                        "platform": normalized_platform,
+                        "url": f"{base_url}/api/firmware/download/{normalized_platform}/{cached.firmware_version}",
+                        "md5": cached.md5_checksum
+                    }
+
+                    # Push update to printer
+                    import json
+                    await websocket.send_text(json.dumps(update_message))
+
+                    # Record update start
+                    await asyncio.to_thread(
+                        UpdateService.record_update_start,
+                        printer_uuid=printer_uuid,
+                        firmware_version=cached.firmware_version,
+                        rollout_id=cached.rollout_id,
+                    )
+
+                    self._logger.info(
+                        f"Sent cached firmware update {cached.firmware_version} "
+                        f"(rollout {cached.rollout_id}) to printer {printer_uuid}"
+                    )
+
+                # Mark all cached updates as delivered
+                await asyncio.to_thread(mark_firmware_update_delivered, printer_uuid)
+                self._logger.info(f"Marked {len(cached_updates)} cached firmware updates as delivered for printer {printer_uuid}")
+        except Exception:
+            self._logger.exception(f"Failed to send cached firmware updates to printer {printer_uuid}")
 
     async def send_firmware_update(self, printer_uuid: str, update_message: dict) -> bool:
         """Send a firmware update message to a specific printer.
