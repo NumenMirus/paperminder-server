@@ -46,10 +46,12 @@ uv run pytest -v
 ```
 
 ### Database Operations
-The application uses SQLAlchemy with PostgreSQL by default. Database URL must be provided via `DATABASE_URL` environment variable.
+The application uses SQLAlchemy 2.0 with PostgreSQL. Database URL must be provided via `DATABASE_URL` environment variable.
+
+**CRITICAL:** All migration commands require `DATABASE_URL` to be set. Do NOT run migrations without setting this variable first.
 
 ```bash
-# Set database URL (required for PostgreSQL)
+# Set database URL (required - PostgreSQL only)
 export DATABASE_URL="postgresql://user:pass@host:5432/dbname"
 
 # Initialize database with migrations (apply all migrations)
@@ -234,6 +236,7 @@ Each printer tracks `daily_message_number` that resets daily. Messages include a
 - **MessageLog**: Historical record of all delivered messages (recipient references printer UUID)
 - **MessageCache**: Temporary storage for offline recipients (delivered on reconnect via `is_delivered` flag)
 - **FirmwareVersion**: Firmware binaries stored as BLOB with MD5/SHA256 checksums, **platform-specific** (unique constraint on version + platform), mandatory flag
+- **FirmwareUpdateCache**: Caches firmware updates for offline printers (stores rollout_id, firmware_version, platform, channel, md5_checksum; delivered on reconnect via `is_delivered` flag)
 - **UpdateRollout**: Campaign configuration with JSONB targeting fields (target_user_ids, target_printer_ids, target_channels) - platform-agnostic version strings only
 - **UpdateHistory**: Individual update attempts with progress tracking (status: pending/downloading/completed/failed/declined)
 
@@ -271,12 +274,16 @@ Each printer tracks `daily_message_number` that resets daily. Messages include a
 1. Printer connects and sends `SubscriptionRequest` with platform and firmware version
 2. Connection manager normalizes platform string, updates printer's firmware_version, auto_update, update_channel, online status
 3. If `auto_update=true`, server checks for active rollouts targeting this printer
-4. If rollout eligible, server finds firmware for printer's platform and pushes `FirmwareUpdateMessage` with download URL
+4. If rollout eligible:
+   - **If printer is online**: Server finds firmware for printer's platform and pushes `FirmwareUpdateMessage` with download URL
+   - **If printer is offline**: Server caches the firmware update in `FirmwareUpdateCache` table (stores rollout_id, firmware_version, platform, channel, md5_checksum)
 5. Printer downloads and reports progress via `FirmwareProgressMessage`
 6. On completion: `FirmwareCompleteMessage` or `FirmwareFailedMessage`
 7. Server updates `UpdateHistory` and `UpdateRollout` counters
 
 **Important:** Each printer receives firmware for its specific platform. A rollout for version "1.5.0" will deliver different firmware binaries to esp8266 vs esp32-c3 printers.
+
+**Offline Printer Support:** Firmware updates are cached for offline printers and automatically delivered when they reconnect, using the `is_delivered` flag to track delivery status.
 
 ### Dependency Injection for Authorization
 ```python
@@ -394,4 +401,10 @@ When printers send subscription messages, they must use `printer_id` (not `api_k
 }
 ```
 The `api_key` field is deprecated and ignored. Always use `printer_id` with the printer's UUID.
-- all the migrations must be run by me
+
+**8. Firmware Update Caching for Offline Printers**
+When a rollout is created, printers that are offline get their firmware updates cached in the `FirmwareUpdateCache` table:
+- The cache stores: rollout_id, firmware_version, platform, channel, md5_checksum
+- When an offline printer reconnects, the server checks the cache for pending updates
+- Cached updates are delivered using the `is_delivered` flag to prevent duplicate delivery
+- This ensures printers don't miss updates even when they're disconnected during rollout creation
